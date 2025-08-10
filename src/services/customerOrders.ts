@@ -1,8 +1,9 @@
-import http from './http';
+import http, { ensureCsrf } from './http';
 import { CustomerOrderReadDTO, CustomerOrderWriteDTO, OrderStatus } from '../types/api-types';
 
 // Menu orders (public)
 export async function createCustomerOrder(dto: CustomerOrderWriteDTO): Promise<CustomerOrderReadDTO> {
+  await ensureCsrf();
   const { data } = await http.post<CustomerOrderReadDTO>('/api/orders', dto);
   return data;
 }
