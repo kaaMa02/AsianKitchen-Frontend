@@ -22,6 +22,7 @@ import {
   createIntentForCustomerOrder,
 } from "../../../services/payment";
 import { stripePromise } from "../../../stripe";
+import { ensureCsrf } from "../../../services/http";
 
 function CheckoutForm() {
   const stripe = useStripe();
@@ -113,6 +114,7 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
         };
+        await ensureCsrf();
         const order = await createCustomerOrder(payload);
         const pi = await createIntentForCustomerOrder(order.id);
         setClientSecret(pi.clientSecret);
@@ -131,6 +133,7 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
         };
+        await ensureCsrf();
         const order = await createBuffetOrder(payload);
         const pi = await createIntentForBuffetOrder(order.id);
         setClientSecret(pi.clientSecret);

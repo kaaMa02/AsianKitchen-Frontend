@@ -9,11 +9,14 @@ const http = axios.create({
   timeout: 12000,
 });
 
-let csrfBootstrapped = false;
+let bootstrapped = false;
 export async function ensureCsrf() {
-  if (csrfBootstrapped) return;
-  await http.get('/api/csrf'); // sets the cookie
-  csrfBootstrapped = true;
+  if (bootstrapped) return;
+  try {
+    await http.get('/api/csrf', { withCredentials: true });
+  } finally {
+    bootstrapped = true;
+  }
 }
 
 export default http;
