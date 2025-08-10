@@ -117,7 +117,7 @@ export default function CartDrawer({ open, onClose }: Props) {
                 variant="contained"
                 onClick={goCheckout}
                 disabled={!canCheckout}
-                sx={{ bgcolor: '#0B2D24', '&:hover': { bgcolor: '#0a241c' } }}
+                sx={{ '&:hover': { bgcolor: '#0a241c' } }}
               >
                 Go to checkout
               </Button>
