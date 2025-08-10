@@ -1,26 +1,45 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { lazy, Suspense } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { Box, CssBaseline } from '@mui/material';
 
-function App() {
+import Navbar from './components/02_molecules/NavBar';
+import Footer from './components/03_organisms/Home/Footer';
+
+import { RestaurantInfoProvider } from './contexts/RestaurantInfoContext';
+import { CartProvider } from './contexts/CartContext';
+
+import ErrorBoundary from './components/common/ErrorBoundary';
+import PageLoader from './components/common/PageLoader';
+import { ToastProvider } from './services/toast';
+
+// lazy-load pages (enables Suspense fallback)
+const HomePage = lazy(() => import('./components/04_pages/HomePage/HomePage'));
+const MenuPage = lazy(() => import('./components/04_pages/MenuPage/MenuPage'));
+
+export default function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <ToastProvider>
+      <RestaurantInfoProvider>
+        <CartProvider>
+          <CssBaseline />
+
+          <ErrorBoundary fallback={<PageLoader />}>
+            <Navbar />
+            {/* spacer for fixed navbar */}
+            <Box sx={{ height: { xs: 56, md: 64 } }} />
+
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/menu" element={<MenuPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+
+            <Footer />
+          </ErrorBoundary>
+        </CartProvider>
+      </RestaurantInfoProvider>
+    </ToastProvider>
   );
 }
-
-export default App;
