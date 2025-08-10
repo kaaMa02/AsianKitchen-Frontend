@@ -9,7 +9,7 @@ const http = axios.create({
   withCredentials: true, // send/receive cookies
   xsrfCookieName: 'XSRF-TOKEN',        // must match Spring's cookie name
   xsrfHeaderName: 'X-XSRF-TOKEN',      // header Axios will send back
-  timeout: 12_000,
+  timeout: 12000,
 });
 
 // no Authorization header anymore
