@@ -1,4 +1,3 @@
-// src/components/03_sections/home/HeroSection.tsx
 import Box from '@mui/material/Box';
 import MuiContainer from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -16,72 +15,46 @@ export default function HeroSection() {
     <Box
       component="header"
       sx={{
-        // viewport height minus fixed navbar
         minHeight: { xs: `calc(100vh - ${NAV_H_XS}px)`, md: `calc(100vh - ${NAV_H_MD}px)` },
-        // push content below navbar
         pt: { xs: `${NAV_H_XS}px`, md: `${NAV_H_MD}px` },
         bgcolor: '#0B2D24',
+        display: 'flex',
+        alignItems: 'center',
       }}
     >
-      <MuiContainer
-        maxWidth="xl"
-        sx={{
-          // center the whole content block vertically
-          minHeight: 'inherit',
-          display: 'grid',
-          alignContent: 'center',
-        }}
-      >
+      <MuiContainer maxWidth="xl" sx={{ py: { xs: 8, md: 12 } }}>
         <Box sx={{ maxWidth: { xs: '100%', md: 820 } }}>
-          {/* “Welcome to” — a bit bigger, not bold */}
-          <Typography
-            variant="h1"
-            sx={{
-              color: '#EFE7CE',
-              fontWeight: 500,
-              lineHeight: 1.06,
-              fontSize: { xs: 50, md: 74 }, // was smaller; now a bit bigger
-              letterSpacing: '-0.01em',
-            }}
-          >
+          <Typography variant="h2" component="h1" sx={{ color: '#EFE7CE', fontWeight: 500, lineHeight: 1.1 }}>
             Welcome to
           </Typography>
 
-          {/* “Asian Kitchen” — keep bold */}
           <Typography
             component="h2"
             sx={{
               color: '#EFE7CE',
-              fontSize: { xs: 56, md: 86 }, // keep strong but not too huge
+              fontSize: { xs: 42, md: 68 },
               fontWeight: 800,
               letterSpacing: '-0.02em',
-              mt: { xs: 1, md: 1.25 },
+              mt: 1.5,
               minHeight: '1.2em',
             }}
           >
             {isLoading ? ' ' : name}
           </Typography>
 
-          {/* Buttons grid */}
+          {/* Primary CTAs */}
           <Box
             sx={{
               mt: { xs: 4.5, md: 6 },
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
               gap: 2,
               width: '100%',
             }}
           >
-            {[
-              { label: 'À la carte', href: '/menu' },
-              { label: 'Reservation', href: '/reservation' },
-              { label: 'Delivery', href: '/delivery' },
-              { label: 'Takeaway', href: '/takeaway' },
-            ].map((b) => (
-              <AKButton key={b.href} asLinkHref={b.href}>
-                {b.label}
-              </AKButton>
-            ))}
+            <AKButton asLinkHref="/menu?type=delivery">Delivery</AKButton>
+            <AKButton asLinkHref="/menu?type=takeaway">Takeaway</AKButton>
+            <AKButton asLinkHref="/reservation">Book a Table</AKButton>
           </Box>
         </Box>
       </MuiContainer>

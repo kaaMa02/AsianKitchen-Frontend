@@ -12,8 +12,6 @@ const http = axios.create({
   timeout: 12000,
 });
 
-// no Authorization header anymore
-
 http.interceptors.response.use(
   (r) => r,
   (err) => {

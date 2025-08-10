@@ -11,6 +11,8 @@ import { CartProvider } from './contexts/CartContext';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import PageLoader from './components/common/PageLoader';
 import { ToastProvider } from './services/toast';
+import ScrollToHash from './components/common/ScrollToHash';
+import CheckoutPage from './components/04_pages/CheckoutPage/CheckoutPage';
 
 // lazy-load pages (enables Suspense fallback)
 const HomePage = lazy(() => import('./components/04_pages/HomePage/HomePage'));
@@ -32,10 +34,12 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/menu" element={<MenuPage />} />
+                <Route path="/checkout" element={<CheckoutPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>
-
+            
+            <ScrollToHash />
             <Footer />
           </ErrorBoundary>
         </CartProvider>

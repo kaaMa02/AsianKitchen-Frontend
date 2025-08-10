@@ -9,18 +9,33 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Button from '@mui/material/Button';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import { useSearchParams } from 'react-router-dom';
 
 import { listAvailableMenuItems } from '../../../services/menuItems';
 import { listPublicFoodItems } from '../../../services/foodItems';
-import { FoodItemDTO, MenuItemDTO, BuffetItemReadDTO, OrderType } from '../../../types/api-types';
-import { buildMenuDisplay, buildBuffetDisplay, groupByCategory } from '../../../utils/buildDisplay';
+import { listAvailableBuffetItems } from '../../../services/buffetItems';
+
+import {
+  FoodItemDTO,
+  MenuItemDTO,
+  BuffetItemReadDTO,
+  OrderType,
+} from '../../../types/api-types';
+
+import {
+  buildMenuDisplay,
+  buildBuffetDisplay,
+  groupByCategory,
+} from '../../../utils/buildDisplay';
+
 import MenuList from '../../03_organisms/Menu/MenuList';
 import BuffetList from '../../03_organisms/Menu/BuffetList';
 import { useCart } from '../../../contexts/CartContext';
 import CartDrawer from '../../02_molecules/Menu/CartDrawer';
-import { listAvailableBuffetItems } from '../../../services/buffetItems';
 
 export default function MenuPage() {
+  const [searchParams] = useSearchParams();
+
   const [tab, setTab] = React.useState(0);
   const [menuGroups, setMenuGroups] = React.useState<
     { category: string; categoryLabel: string; items: any[] }[]
@@ -31,23 +46,39 @@ export default function MenuPage() {
 
   const { addOrInc, state, setOrderType, count, total } = useCart();
 
+  // Initialize from query string using the enum
+  React.useEffect(() => {
+    const t = (searchParams.get('type') || '').toLowerCase();
+    if (t === 'delivery') setOrderType(OrderType.DELIVERY);
+    if (t === 'takeaway') setOrderType(OrderType.TAKEAWAY);
+
+    const qTab = (searchParams.get('tab') || '').toLowerCase();
+    if (qTab === 'buffet') setTab(1);
+    if (qTab === 'menu' || qTab === 'a-la-carte') setTab(0);
+  }, [searchParams, setOrderType]);
+
+  // Load data
   React.useEffect(() => {
     (async () => {
       setLoading(true);
-      const [menu, buffet, food]: [MenuItemDTO[], BuffetItemReadDTO[], FoodItemDTO[]] = await Promise.all([
-        listAvailableMenuItems(),
-        listAvailableBuffetItems(),
-        listPublicFoodItems(),
-      ]);
+      try {
+        const [menu, buffet, food]: [MenuItemDTO[], BuffetItemReadDTO[], FoodItemDTO[]] =
+          await Promise.all([
+            listAvailableMenuItems(),
+            listAvailableBuffetItems(),
+            listPublicFoodItems(),
+          ]);
 
-      const foodById = Object.fromEntries(food.map((f) => [String(f.id), f]));
-      const menuDisplay = buildMenuDisplay(menu, foodById);
-      const buffetDisplay = buildBuffetDisplay(buffet, foodById);
+        const foodById = Object.fromEntries(food.map((f) => [String(f.id), f]));
+        const menuDisplay = buildMenuDisplay(menu, foodById);
+        const buffetDisplay = buildBuffetDisplay(buffet, foodById);
 
-      setMenuGroups(groupByCategory(menuDisplay));
-      setBuffetItems(buffetDisplay);
-      setLoading(false);
-    })().catch(() => setLoading(false));
+        setMenuGroups(groupByCategory(menuDisplay));
+        setBuffetItems(buffetDisplay);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   // handlers for Add buttons
@@ -71,16 +102,16 @@ export default function MenuPage() {
     });
   };
 
-  const handleOrderType = (_: any, val: OrderType | null) => {
+  const handleOrderType = (_: unknown, val: OrderType | null) => {
     if (val) setOrderType(val);
   };
 
   return (
     <Box sx={{ bgcolor: '#F6F0DE', minHeight: '100vh' }}>
-      {/* Top band like the hero, per your request */}
+      {/* Top band like hero */}
       <Box sx={{ bgcolor: '#0B2D24', color: '#EFE7CE', py: { xs: 6, md: 8 }, mb: { xs: 4, md: 6 } }}>
         <MuiContainer maxWidth="xl">
-          <Typography variant="h3" sx={{ fontWeight: 800 }}>
+          <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
             Our Menu
           </Typography>
           <Typography sx={{ opacity: 0.9, mt: 0.75 }}>
@@ -91,7 +122,15 @@ export default function MenuPage() {
 
       <MuiContainer maxWidth="xl" sx={{ pb: { xs: 8, md: 12 } }}>
         {/* Controls row */}
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: { xs: 2, md: 3 }, flexWrap: 'wrap' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 2,
+            alignItems: 'center',
+            mb: { xs: 2, md: 3 },
+            flexWrap: 'wrap',
+          }}
+        >
           <Tabs
             value={tab}
             onChange={(_, v) => setTab(v)}
@@ -113,16 +152,19 @@ export default function MenuPage() {
             onChange={handleOrderType}
             size="small"
           >
-            <ToggleButton value="TAKEAWAY">Takeaway</ToggleButton>
-            <ToggleButton value="DELIVERY">Delivery</ToggleButton>
+            <ToggleButton value={OrderType.TAKEAWAY}>Takeaway</ToggleButton>
+            <ToggleButton value={OrderType.DELIVERY}>Delivery</ToggleButton>
           </ToggleButtonGroup>
 
           <Button
             variant="contained"
             onClick={() => setDrawer(true)}
             startIcon={<ShoppingCartIcon />}
+            disabled={count === 0}
             sx={{
-              '&:hover': { bgcolor: '#0a241c' },
+              bgcolor: '#C88C1A',
+              color: '#F6F0DE',
+              '&:hover': { bgcolor: '#C88C1A', opacity: 0.95 },
             }}
           >
             Cart ({count}) · CHF {total.toFixed(2)}

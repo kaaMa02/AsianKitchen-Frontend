@@ -1,21 +1,17 @@
-// src/components/03_organisms/Navbar.tsx
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import MuiContainer from '@mui/material/Container';
 import Link from '@mui/material/Link';
 import Box from '@mui/material/Box';
-
-export const NAV_H_XS = 56; // export so Hero can reuse
-export const NAV_H_MD = 64;
+import { Link as RouterLink } from 'react-router-dom';
 
 const linkSx = {
   color: '#EFE7CE',
   textTransform: 'uppercase',
   letterSpacing: '0.18em',
   fontSize: { xs: 12, md: 14 },
-  fontWeight: 600,
   '&:hover': { opacity: 0.9, textDecoration: 'none' },
-} as const;
+};
 
 export default function Navbar() {
   return (
@@ -24,27 +20,18 @@ export default function Navbar() {
         <Toolbar
           disableGutters
           sx={{
-            minHeight: { xs: NAV_H_XS, md: NAV_H_MD },
+            minHeight: { xs: 56, md: 64 },
             width: '100%',
+            justifyContent: 'flex-end',
           }}
         >
-          <Box
-            component="nav"
-            aria-label="Primary"
-            sx={{ ml: 'auto', display: 'flex', gap: { xs: 3, md: 6 } }}
-          >
-            <Link underline="none" href="#about" sx={linkSx}>
-              About Us
-            </Link>
-            <Link underline="none" href="#location" sx={linkSx}>
-              Location
-            </Link>
-            <Link underline="none" href="#contact" sx={linkSx}>
-              Contact
-            </Link>
-            <Link underline="none" href="#info" sx={linkSx}>
-              Info
-            </Link>
+          <Box component="nav" aria-label="Primary" sx={{ display: 'flex', gap: { xs: 3, md: 6 } }}>
+            {/* absolute hashes so they work from anywhere */}
+            <Link component={RouterLink} underline="none" to="/#about" sx={linkSx}>About Us</Link>
+            <Link component={RouterLink} underline="none" to="/#location" sx={linkSx}>Location</Link>
+            <Link component={RouterLink} underline="none" to="/#contact" sx={linkSx}>Contact</Link>
+            {/* go straight to menu */}
+            <Link component={RouterLink} underline="none" to="/menu" sx={linkSx}>Menu</Link>
           </Box>
         </Toolbar>
       </MuiContainer>
