@@ -5,14 +5,7 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import {
-  Box,
-  Button,
-  Typography,
-  Alert,
-  Chip,
-  Divider,
-} from "@mui/material";
+import { Box, Button, Typography, Alert, Chip, Divider } from "@mui/material";
 import TextField from "@mui/material/TextField";
 
 import { useCart } from "../../../contexts/CartContext";
@@ -48,7 +41,11 @@ const toNumber = (v: unknown): number => {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   if (v == null) return 0;
   // handle "12,00", "CHF 12.00", etc.
-  const n = Number(String(v).replace(/[^\d,.-]/g, "").replace(",", "."));
+  const n = Number(
+    String(v)
+      .replace(/[^\d,.-]/g, "")
+      .replace(",", ".")
+  );
   return Number.isFinite(n) ? n : 0;
 };
 
@@ -57,7 +54,9 @@ const fieldSx = {
   "& .MuiInputLabel-root": { color: "rgba(255,255,255,0.92)" },
   "& .MuiOutlinedInput-input": { color: "rgba(255,255,255,0.98)" },
   "& .MuiFormHelperText-root": { color: "#ffb4a2" },
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.22)" },
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(255,255,255,0.22)",
+  },
   "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
     borderColor: "rgba(255,255,255,0.38)",
   },
@@ -75,11 +74,30 @@ const cardSx = {
 /* Payment step (left card)                                                   */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function PaymentStep() {
+function PaymentStep({
+  clientSecret,
+  fallbackAmount,
+}: {
+  clientSecret: string;
+  fallbackAmount: number; // your cart subtotal as a safe fallback
+}) {
   const stripe = useStripe();
   const elements = useElements();
-  const { total } = useCart();
   const [submitting, setSubmitting] = React.useState(false);
+  const [finalAmount, setFinalAmount] = React.useState<number | null>(null); // CHF
+
+  // Read the PaymentIntent (to show subtotal + tax if backend computed it)
+  React.useEffect(() => {
+    if (!stripe || !clientSecret) return;
+    (async () => {
+      const { paymentIntent, error } = await stripe.retrievePaymentIntent(
+        clientSecret
+      );
+      if (paymentIntent && !error) {
+        setFinalAmount(paymentIntent.amount / 100); // Stripe gives minor units
+      }
+    })();
+  }, [stripe, clientSecret]);
 
   const onPay = async () => {
     if (!stripe || !elements) return;
@@ -94,24 +112,24 @@ function PaymentStep() {
     else window.location.href = "/thank-you";
   };
 
-  return (
-    <Box sx={cardSx}>
-      <Typography sx={{ fontWeight: 800, mb: 1.5 }}>Payment</Typography>
-      <Typography sx={{ opacity: 0.85, mb: 2 }}>
-        Enter your card details below to complete the order.
-      </Typography>
+  // Show PI total if we got it, else your cart total
+  const display = (finalAmount ?? fallbackAmount).toFixed(2);
 
-      <Box sx={{ display: "grid", gap: 2, maxWidth: 520 }}>
-        <PaymentElement />
-        <Button
-          disabled={!stripe || submitting}
-          variant="contained"
-          onClick={onPay}
-          sx={{ height: 44, fontWeight: 800 }}
-        >
-          Pay {formatChf(total)}
-        </Button>
-      </Box>
+  return (
+    <Box sx={{ maxWidth: 520, mx: "auto", display: "grid", gap: 2 }}>
+      <PaymentElement />
+      <Button
+        disabled={!stripe || submitting}
+        variant="contained"
+        onClick={onPay}
+      >
+        Pay CHF {display}
+      </Button>
+      {finalAmount === null && (
+        <Typography variant="body2" sx={{ opacity: 0.7 }}>
+          Calculating taxes…
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -132,7 +150,7 @@ const emptyCustomer: CustomerInfoDTO = {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { state } = useCart();
+  const { state, total } = useCart();
 
   // 1) local state
   const [clientSecret, setClientSecret] = React.useState<string>();
@@ -349,16 +367,23 @@ export default function CheckoutPage() {
               × {ln.qty}
             </Typography>
           </Box>
-          <Typography sx={{ fontWeight: 800 }}>{formatChf(ln.lineTotal)}</Typography>
+          <Typography sx={{ fontWeight: 800 }}>
+            {formatChf(ln.lineTotal)}
+          </Typography>
         </Box>
       ))}
 
       <Box sx={{ display: "flex", justifyContent: "space-between", pt: 1.5 }}>
         <Typography sx={{ fontWeight: 800 }}>Total</Typography>
-        <Typography sx={{ fontWeight: 800 }}>{formatChf(summaryTotal)}</Typography>
+        <Typography sx={{ fontWeight: 800 }}>
+          {formatChf(summaryTotal)}
+        </Typography>
       </Box>
 
-      <Typography variant="caption" sx={{ opacity: 0.75, display: "block", mt: 1 }}>
+      <Typography
+        variant="caption"
+        sx={{ opacity: 0.75, display: "block", mt: 1 }}
+      >
         Taxes are calculated on the payment step.
       </Typography>
     </Box>
@@ -543,7 +568,10 @@ export default function CheckoutPage() {
         }}
       >
         <Elements stripe={stripePromise} options={{ clientSecret }}>
-          <PaymentStep />
+          <PaymentStep
+            clientSecret={clientSecret}
+            fallbackAmount={total ?? 0}
+          />
         </Elements>
 
         {OrderSummary}
