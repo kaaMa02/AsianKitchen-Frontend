@@ -265,6 +265,12 @@ export interface RestaurantInfoReadDTO {
 
 export interface PaymentIntentResponseDTO {
   clientSecret: string;
+  amounts?: {
+    total: number; // rappen
+    tax: number;   // rappen
+    net: number;   // rappen
+    vatRatePct?: number;
+  };
 }
 
 export interface PaymentConfirmDTO {
@@ -286,4 +292,3 @@ export interface ContactMessageReadDTO {
   message: string;
   createdAt: LocalDateTime;
 }
-
