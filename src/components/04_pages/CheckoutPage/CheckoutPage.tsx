@@ -33,6 +33,10 @@ import { stripePromise } from "../../../stripe";
 // Display VAT — keep this in sync with the backend
 const VAT_RATE = 0.026;
 
+// Brand colors
+const GOLD = "#C9A227";
+const GOLD_HOVER = "#B38E1E";
+
 type Errors = Record<string, string>;
 
 const emptyCustomer: CustomerInfoDTO = {
@@ -79,7 +83,7 @@ function PaymentStep() {
         disabled={!stripe || submitting}
         variant="contained"
         onClick={onPay}
-        sx={{ bgcolor: "#0B2D24", "&:hover": { bgcolor: "#0a241c" } }}
+        sx={{ bgcolor: GOLD, "&:hover": { bgcolor: GOLD_HOVER } }}
       >
         Pay {chf(estimatedGrand)}
       </Button>
@@ -373,7 +377,7 @@ export default function CheckoutPage() {
                 variant="contained"
                 onClick={preparePayment}
                 disabled={preparing}
-                sx={{ bgcolor: "#0B2D24", "&:hover": { bgcolor: "#0a241c" } }}
+                sx={{ bgcolor: GOLD, "&:hover": { bgcolor: GOLD_HOVER } }}
               >
                 {preparing ? "Preparing…" : "Continue to payment"}
               </Button>
