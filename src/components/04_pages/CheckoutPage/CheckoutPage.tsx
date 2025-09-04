@@ -1,70 +1,62 @@
+// src/components/04_pages/CheckoutPage/CheckoutPage.tsx
 import * as React from "react";
-import {
-  Elements,
-  PaymentElement,
-  useStripe,
-  useElements,
-} from "@stripe/react-stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import {
   Box,
   Button,
   Typography,
   Alert,
   TextField,
+  Paper,
   Divider,
-  Chip,
 } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 
 import { useCart } from "../../../contexts/CartContext";
-import { useNavigate } from "react-router-dom";
 import type {
   OrderType,
   BuffetOrderWriteDTO,
   CustomerOrderWriteDTO,
   CustomerInfoDTO,
-  PaymentIntentResponseDTO,
 } from "../../../types/api-types";
+
 import { createBuffetOrder } from "../../../services/buffetOrders";
 import { createCustomerOrder } from "../../../services/customerOrders";
 import {
   createIntentForBuffetOrder,
   createIntentForCustomerOrder,
 } from "../../../services/payment";
-import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
+import { stripePromise } from "../../../stripe";
 
-// ────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Display VAT — keep this in sync with the backend
+const VAT_RATE = 0.026;
 
-function fmtChfFromRappen(r?: number) {
-  return r == null ? "—" : `CHF ${(r / 100).toFixed(2)}`;
-}
+type Errors = Record<string, string>;
 
-function Row({
-  label,
-  value,
-  bold,
-  muted,
-}: {
-  label: string;
-  value: string;
-  bold?: boolean;
-  muted?: boolean;
-}) {
-  return (
-    <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-      <Typography sx={{ color: muted ? "rgba(231,246,241,.75)" : "#e7f6f1" }}>
-        {label}
-      </Typography>
-      <Typography sx={{ fontWeight: bold ? 800 : 600, color: "#e7f6f1" }}>
-        {value}
-      </Typography>
-    </Box>
-  );
-}
+const emptyCustomer: CustomerInfoDTO = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: { street: "", streetNo: "", plz: "", city: "" },
+};
 
-function PaymentStep({ payLabel }: { payLabel: string }) {
+// Small helper to 2-decimals
+const chf = (n: number) => `CHF ${n.toFixed(2)}`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment step (Stripe UI)
+function PaymentStep() {
   const stripe = useStripe();
   const elements = useElements();
+  const { total } = useCart();
+
+  // Match backend by showing total + VAT
+  const estimatedVat = React.useMemo(() => total * VAT_RATE, [total]);
+  const estimatedGrand = React.useMemo(() => total + estimatedVat, [total, estimatedVat]);
+
   const [submitting, setSubmitting] = React.useState(false);
 
   const onPay = async () => {
@@ -81,95 +73,118 @@ function PaymentStep({ payLabel }: { payLabel: string }) {
   };
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
+    <Box sx={{ maxWidth: 520, mx: "auto", display: "grid", gap: 2 }}>
       <PaymentElement />
-      <Button disabled={!stripe || submitting} variant="contained" onClick={onPay}>
-        {payLabel}
+      <Button
+        disabled={!stripe || submitting}
+        variant="contained"
+        onClick={onPay}
+        sx={{ bgcolor: "#0B2D24", "&:hover": { bgcolor: "#0a241c" } }}
+      >
+        Pay {chf(estimatedGrand)}
       </Button>
+      <Typography variant="body2" sx={{ opacity: 0.7, textAlign: "center" }}>
+        You’ll be charged the total shown above (incl. VAT).
+      </Typography>
     </Box>
   );
 }
 
-type Errors = Record<string, string>;
-
-const emptyCustomer: CustomerInfoDTO = {
-  firstName: "",
-  lastName: "",
-  email: "",
-  phone: "",
-  address: { street: "", streetNo: "", plz: "", city: "" },
-};
-
-// ────────────────────────────────────────────────────────────────────────────
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Main page
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { state } = useCart();
+  const { state, total } = useCart();
 
+  // Hooks: keep all at top, no early returns before hooks
   const [clientSecret, setClientSecret] = React.useState<string>();
-  const [amounts, setAmounts] =
-    React.useState<PaymentIntentResponseDTO["amounts"] | null>(null);
   const [error, setError] = React.useState<string>();
   const [preparing, setPreparing] = React.useState(false);
-  const [customer, setCustomer] =
-    React.useState<CustomerInfoDTO>(emptyCustomer);
+  const [customer, setCustomer] = React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
 
-  // normalize cart lines
+  // Cart lines (normalize shapes)
   const cartLines = React.useMemo(() => {
     const anyState = state as any;
     return (anyState.lines ?? anyState.items ?? []) as Array<{
       kind: "MENU" | "BUFFET";
       id: string;
-      name?: string;
       quantity: number;
       priceChf?: number;
     }>;
   }, [state]);
 
+  // Summary (display only)
+  const estimatedVat = React.useMemo(() => total * VAT_RATE, [total]);
+  const estimatedGrand = React.useMemo(() => total + estimatedVat, [total, estimatedVat]);
+
+  // Validation (mirror backend NotBlank)
   const validate = (c: CustomerInfoDTO): Errors => {
     const e: Errors = {};
     const req = (v?: string) => !v || !v.trim();
+
     if (req(c.firstName)) e.firstName = "Required";
     if (req(c.lastName)) e.lastName = "Required";
     if (req(c.email) || !/.+@.+\..+/.test(c.email)) e.email = "Valid email required";
     if (req(c.phone)) e.phone = "Required";
+
+    // Address required for both delivery and takeaway (as per backend)
     if (req(c.address.street)) e["address.street"] = "Required";
     if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
     if (req(c.address.plz)) e["address.plz"] = "Required";
     if (req(c.address.city)) e["address.city"] = "Required";
+
     return e;
   };
 
+  // Map backend validation paths → field names
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
     Object.entries(details).forEach(([k, v]) => {
-      const short = k.replace(/^customerInfo\./, "");
+      const short = k.replace(/^customerInfo\./, ""); // e.g. customerInfo.address.plz → address.plz
       mapped[short] = v;
     });
     setFieldErrors(mapped);
   };
 
+  // Controlled inputs
   const handleInput =
-    (path: string) => (ev: React.ChangeEvent<HTMLInputElement>) => {
+    (path: string) =>
+    (ev: React.ChangeEvent<HTMLInputElement>) => {
       const v = ev.target.value;
       setCustomer((prev) => {
         const next = { ...prev, address: { ...prev.address } };
         switch (path) {
-          case "firstName": next.firstName = v; break;
-          case "lastName": next.lastName = v; break;
-          case "email": next.email = v; break;
-          case "phone": next.phone = v; break;
-          case "address.street": next.address.street = v; break;
-          case "address.streetNo": next.address.streetNo = v; break;
-          case "address.plz": next.address.plz = v; break;
-          case "address.city": next.address.city = v; break;
+          case "firstName":
+            next.firstName = v;
+            break;
+          case "lastName":
+            next.lastName = v;
+            break;
+          case "email":
+            next.email = v;
+            break;
+          case "phone":
+            next.phone = v;
+            break;
+          case "address.street":
+            next.address.street = v;
+            break;
+          case "address.streetNo":
+            next.address.streetNo = v;
+            break;
+          case "address.plz":
+            next.address.plz = v;
+            break;
+          case "address.city":
+            next.address.city = v;
+            break;
         }
         return next;
       });
     };
 
-  // Create order + PaymentIntent (with VAT-inclusive calculation from backend)
+  // Prepare PaymentIntent after collecting details
   const preparePayment = async () => {
     try {
       setError(undefined);
@@ -179,6 +194,7 @@ export default function CheckoutPage() {
         setError("Your cart is empty.");
         return;
       }
+
       const hasMenu = cartLines.some((l) => l.kind === "MENU");
       const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
       if (hasMenu && hasBuffet) {
@@ -209,7 +225,6 @@ export default function CheckoutPage() {
         const order = await createCustomerOrder(payload);
         const pi = await createIntentForCustomerOrder(order.id);
         setClientSecret(pi.clientSecret);
-        setAmounts(pi.amounts ?? null);
       } else if (hasBuffet) {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
@@ -221,7 +236,6 @@ export default function CheckoutPage() {
         const order = await createBuffetOrder(payload);
         const pi = await createIntentForBuffetOrder(order.id);
         setClientSecret(pi.clientSecret);
-        setAmounts(pi.amounts ?? null);
       }
     } catch (e: any) {
       console.error(e);
@@ -237,45 +251,27 @@ export default function CheckoutPage() {
     }
   };
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // RENDER
-
-  // Header
-  const Header = (
-    <Box sx={{ mb: 2 }}>
-      <Typography variant="h4" sx={{ fontWeight: 900, color: "#e7f6f1" }}>
-        Checkout
-      </Typography>
-      <Typography sx={{ opacity: 0.8 }}>
-        {clientSecret ? "Complete your payment securely." : "Please provide your contact and address details."}
-      </Typography>
-      <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-        <Chip label="1. Details" color={clientSecret ? "default" : "primary"} variant="filled" />
-        <Chip label="2. Payment" color={clientSecret ? "primary" : "default"} variant="filled" />
-      </Box>
-    </Box>
-  );
-
-  // Left card style
-  const cardSx = {
-    background: "#112b25",
-    borderRadius: 3,
-    p: 3,
-    color: "#e7f6f1",
-    boxShadow: "0 2px 0 rgba(0,0,0,.12), inset 0 0 0 1px rgba(255,255,255,.06)",
-  };
+  // ───────────────────────────────────────────────────────────────────────────
+  // Render
 
   if (!clientSecret) {
     return (
-      <Box sx={{ p: 3, maxWidth: 1100, mx: "auto" }}>
-        {Header}
+      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 980, mx: "auto" }}>
+        <Typography variant="h5" sx={{ fontWeight: 800, color: "#0B2D24", mb: 2 }}>
+          Checkout
+        </Typography>
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { md: "1fr 1fr" }, gap: 3 }}>
-          {/* Details card */}
-          <Box sx={cardSx}>
-            <Typography sx={{ fontWeight: 800, mb: 1, color: "#e7f6f1" }}>
-              Your details
-            </Typography>
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: { xs: "1fr", md: "2fr 1fr" },
+            alignItems: "start",
+          }}
+        >
+          {/* Left: Details */}
+          <Paper elevation={0} sx={{ p: 2, border: "1px solid #e5e7eb", borderRadius: 2 }}>
+            <Typography sx={{ fontWeight: 700, color: "#0B2D24", mb: 1.5 }}>Your details</Typography>
 
             <Box
               sx={{
@@ -291,7 +287,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("firstName")}
                 error={!!fieldErrors.firstName}
                 helperText={fieldErrors.firstName}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
               <TextField
                 label="Last name"
@@ -300,8 +296,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("lastName")}
                 error={!!fieldErrors.lastName}
                 helperText={fieldErrors.lastName}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
+
               <TextField
                 label="Email"
                 type="email"
@@ -310,7 +307,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("email")}
                 error={!!fieldErrors.email}
                 helperText={fieldErrors.email}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
               <TextField
                 label="Phone"
@@ -319,8 +316,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("phone")}
                 error={!!fieldErrors.phone}
                 helperText={fieldErrors.phone}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
+
               <TextField
                 label="Street"
                 fullWidth
@@ -328,7 +326,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.street")}
                 error={!!fieldErrors["address.street"]}
                 helperText={fieldErrors["address.street"]}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
                 sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
               />
               <TextField
@@ -338,8 +336,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.streetNo")}
                 error={!!fieldErrors["address.streetNo"]}
                 helperText={fieldErrors["address.streetNo"]}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
+
               <TextField
                 label="PLZ"
                 fullWidth
@@ -347,7 +346,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.plz")}
                 error={!!fieldErrors["address.plz"]}
                 helperText={fieldErrors["address.plz"]}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
               <TextField
                 label="City"
@@ -356,7 +355,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.city")}
                 error={!!fieldErrors["address.city"]}
                 helperText={fieldErrors["address.city"]}
-                InputLabelProps={{ sx: { color: "rgba(231,246,241,.85)" } }}
+                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
               />
             </Box>
 
@@ -370,83 +369,55 @@ export default function CheckoutPage() {
               <Button variant="outlined" onClick={() => navigate("/menu")}>
                 Back to Menu
               </Button>
-              <Button variant="contained" onClick={preparePayment} disabled={preparing}>
+              <Button
+                variant="contained"
+                onClick={preparePayment}
+                disabled={preparing}
+                sx={{ bgcolor: "#0B2D24", "&:hover": { bgcolor: "#0a241c" } }}
+              >
                 {preparing ? "Preparing…" : "Continue to payment"}
               </Button>
             </Box>
-          </Box>
+          </Paper>
 
-          {/* Order summary */}
-          <Box sx={cardSx}>
-            <Typography sx={{ fontWeight: 800, mb: 1.5, color: "#e7f6f1" }}>
-              Order summary
+          {/* Right: Summary */}
+          <Paper elevation={0} sx={{ p: 2, border: "1px solid #e5e7eb", borderRadius: 2 }}>
+            <Typography sx={{ fontWeight: 700, color: "#0B2D24" }}>Order summary</Typography>
+            <Divider sx={{ my: 1.5 }} />
+            <Box sx={{ display: "grid", gap: 0.75 }}>
+              <Row label="Subtotal" value={chf(total)} />
+              <Row label={`VAT (${(VAT_RATE * 100).toFixed(1)}%)`} value={chf(estimatedVat)} />
+              <Divider sx={{ my: 1 }} />
+              <Row label="Total (incl. VAT)" value={chf(estimatedGrand)} bold />
+            </Box>
+            <Typography variant="caption" sx={{ mt: 1.5, display: "block", opacity: 0.7 }}>
+              The final amount charged will match this total.
             </Typography>
-
-            <Box sx={{ display: "grid", gap: 1.25 }}>
-              {cartLines.map((l) => (
-                <Box key={l.id}>
-                  <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                    <Typography sx={{ fontWeight: 700 }}>{l.name ?? "Item"}</Typography>
-                    {/* If you want to show line totals, add them here from your cart state */}
-                  </Box>
-                  <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                    × {l.quantity}
-                  </Typography>
-                  <Divider sx={{ mt: 1.25, opacity: 0.1 }} />
-                </Box>
-              ))}
-            </Box>
-
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Taxes are calculated on the payment step.
-              </Typography>
-            </Box>
-          </Box>
+          </Paper>
         </Box>
       </Box>
     );
   }
 
-  // Payment step
-  const payLabel = `Pay ${fmtChfFromRappen(amounts?.total)}`;
-
+  // Stripe payment step
   return (
-    <Box sx={{ p: 3, maxWidth: 1100, mx: "auto" }}>
-      {Header}
-
-      <Box sx={{ display: "grid", gridTemplateColumns: { md: "1fr 1fr" }, gap: 3 }}>
-        {/* Payment card */}
-        <Box sx={cardSx}>
-          <Typography sx={{ fontWeight: 800, mb: 1, color: "#e7f6f1" }}>
-            Payment
-          </Typography>
-          <Elements stripe={stripePromise} options={{ clientSecret }}>
-            <PaymentStep payLabel={payLabel} />
-          </Elements>
-        </Box>
-
-        {/* Summary with VAT line (included) */}
-        <Box sx={cardSx}>
-          <Typography sx={{ fontWeight: 800, mb: 1.5, color: "#e7f6f1" }}>
-            Order summary
-          </Typography>
-
-          <Box sx={{ display: "grid", gap: 1.25 }}>
-            {/* Optional: <Row label="Subtotal" value={fmtChfFromRappen(amounts?.net)} /> */}
-            <Row
-              label={`VAT${amounts?.vatRatePct != null ? ` (${amounts.vatRatePct.toFixed(2)}% included)` : " (included)"}`}
-              value={fmtChfFromRappen(amounts?.tax)}
-              muted
-            />
-            <Divider sx={{ my: 1, opacity: 0.12 }} />
-            <Row label="Total" value={fmtChfFromRappen(amounts?.total)} bold />
-            <Typography variant="caption" sx={{ opacity: 0.75 }}>
-              Prices include VAT. Taxes shown here are included in the total.
-            </Typography>
-          </Box>
-        </Box>
+    <Elements stripe={stripePromise} options={{ clientSecret }}>
+      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: "auto" }}>
+        <Typography variant="h5" sx={{ fontWeight: 800, color: "#0B2D24", mb: 2 }}>
+          Secure payment
+        </Typography>
+        <PaymentStep />
       </Box>
+    </Elements>
+  );
+}
+
+// Simple label/value row
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+      <Typography sx={{ opacity: 0.85 }}>{label}</Typography>
+      <Typography sx={{ fontWeight: bold ? 800 : 600 }}>{value}</Typography>
     </Box>
   );
 }
