@@ -5,8 +5,17 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { Box, Button, Typography, Alert } from "@mui/material";
-import TextField from "@mui/material/TextField";
+import {
+  Box,
+  Button,
+  Typography,
+  Alert,
+  TextField,
+  Paper,
+  Divider,
+  Chip,
+  Stack,
+} from "@mui/material";
 
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +33,39 @@ import {
 } from "../../../services/payment";
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
+
+/* ---- Theme helpers to match your site ---- */
+const COLORS = {
+  bg: "#081f19",
+  card: "rgba(255,255,255,0.04)",
+  stroke: "rgba(255,255,255,0.10)",
+  text: "rgba(255,255,255,0.92)",
+  sub: "rgba(255,255,255,0.72)",
+  muted: "rgba(255,255,255,0.55)",
+  accent: "#F6C343",
+};
+
+// Reusable styling for all TextFields on this page
+const TF_PROPS = {
+  InputLabelProps: {
+    sx: {
+      color: "rgba(255,255,255,0.85)", // lighter label
+      "&.Mui-focused": { color: COLORS.accent }, // gold on focus
+    },
+  },
+  InputProps: {
+    sx: {
+      color: COLORS.text,
+      background: "rgba(255,255,255,0.02)",
+      "& .MuiOutlinedInput-notchedOutline": { borderColor: COLORS.stroke },
+      "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: COLORS.sub },
+      "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+        borderColor: COLORS.accent,
+      },
+    },
+  },
+  FormHelperTextProps: { sx: { color: "#ffb4b4" } }, // clearer error text
+} as const;
 
 function PaymentStep() {
   const stripe = useStripe();
@@ -45,16 +87,46 @@ function PaymentStep() {
   };
 
   return (
-    <Box sx={{ maxWidth: 520, mx: "auto", display: "grid", gap: 2 }}>
-      <PaymentElement />
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2, md: 3 },
+        bgcolor: COLORS.card,
+        border: `1px solid ${COLORS.stroke}`,
+        borderRadius: 3,
+      }}
+    >
+      <Typography sx={{ fontWeight: 800, mb: 1.5, color: COLORS.text }}>
+        Payment
+      </Typography>
+
+      <Box sx={{ mb: 2, color: COLORS.muted }}>
+        Enter your card details below to complete the order.
+      </Box>
+
+      <Box sx={{ mb: 2 }}>
+        <PaymentElement />
+      </Box>
+
       <Button
+        fullWidth
+        size="large"
         disabled={!stripe || submitting}
         variant="contained"
         onClick={onPay}
+        sx={{
+          textTransform: "none",
+          fontWeight: 700,
+          bgcolor: COLORS.accent,
+          color: "#0B2D24",
+          "&:hover": { bgcolor: "#eab833" },
+          borderRadius: 2,
+          py: 1.25,
+        }}
       >
         Pay CHF {total.toFixed(2)}
       </Button>
-    </Box>
+    </Paper>
   );
 }
 
@@ -70,7 +142,7 @@ const emptyCustomer: CustomerInfoDTO = {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { state } = useCart();
+  const { state, total } = useCart();
 
   // 1) local state
   const [clientSecret, setClientSecret] = React.useState<string>();
@@ -84,6 +156,9 @@ export default function CheckoutPage() {
   const cartLines = React.useMemo(() => {
     const anyState = state as any;
     return (anyState.lines ?? anyState.items ?? []) as Array<{
+      key?: string;
+      name?: string;
+      priceChf?: number;
       kind: "MENU" | "BUFFET";
       id: string;
       quantity: number;
@@ -191,7 +266,7 @@ export default function CheckoutPage() {
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
           userId: undefined,
-          customerInfo: customer, // ✅ send real customer info
+          customerInfo: customer,
           orderType,
           specialInstructions: undefined,
           items: cartLines.map((l) => ({
@@ -205,7 +280,7 @@ export default function CheckoutPage() {
       } else if (hasBuffet) {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
-          customerInfo: customer, // ✅ send real customer info
+          customerInfo: customer,
           orderType,
           specialInstructions: undefined,
           items: cartLines.map((l) => ({
@@ -219,7 +294,6 @@ export default function CheckoutPage() {
       }
     } catch (e: any) {
       console.error(e);
-      // surface backend validation nicely if present
       const details = e?.response?.data?.details as
         | Record<string, string>
         | undefined;
@@ -234,124 +308,310 @@ export default function CheckoutPage() {
     }
   };
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // RENDER
+  /* ---------------------------- RENDER ---------------------------- */
 
-  if (!clientSecret) {
+  // Step 2: Payment
+  if (clientSecret) {
     return (
-      <Box sx={{ p: 3, maxWidth: 720, mx: "auto" }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>
-          Your details
-        </Typography>
+      <Box
+        sx={{ bgcolor: COLORS.bg, minHeight: "100vh", py: { xs: 2, md: 4 } }}
+      >
+        <Box sx={{ maxWidth: 1040, mx: "auto", px: 2 }}>
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+            <Chip
+              label="1. Details"
+              variant="outlined"
+              sx={{ color: COLORS.muted, borderColor: COLORS.stroke }}
+            />
+            <Chip
+              label="2. Payment"
+              sx={{ bgcolor: COLORS.accent, color: "#0B2D24", fontWeight: 700 }}
+            />
+          </Stack>
 
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-          }}
-        >
-          <TextField
-            label="First name"
-            fullWidth
-            value={customer.firstName}
-            onChange={handleInput("firstName")}
-            error={!!fieldErrors.firstName}
-            helperText={fieldErrors.firstName}
-          />
-
-          <TextField
-            label="Last name"
-            fullWidth
-            value={customer.lastName}
-            onChange={handleInput("lastName")}
-            error={!!fieldErrors.lastName}
-            helperText={fieldErrors.lastName}
-          />
-
-          <TextField
-            label="Email"
-            type="email"
-            fullWidth
-            value={customer.email}
-            onChange={handleInput("email")}
-            error={!!fieldErrors.email}
-            helperText={fieldErrors.email}
-          />
-
-          <TextField
-            label="Phone"
-            fullWidth
-            value={customer.phone}
-            onChange={handleInput("phone")}
-            error={!!fieldErrors.phone}
-            helperText={fieldErrors.phone}
-          />
-
-          {/* street uses full width on mobile, first column on desktop */}
-          <TextField
-            label="Street"
-            fullWidth
-            value={customer.address.street}
-            onChange={handleInput("address.street")}
-            error={!!fieldErrors["address.street"]}
-            helperText={fieldErrors["address.street"]}
-            sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
-          />
-
-          <TextField
-            label="No."
-            fullWidth
-            value={customer.address.streetNo}
-            onChange={handleInput("address.streetNo")}
-            error={!!fieldErrors["address.streetNo"]}
-            helperText={fieldErrors["address.streetNo"]}
-          />
-
-          <TextField
-            label="PLZ"
-            fullWidth
-            value={customer.address.plz}
-            onChange={handleInput("address.plz")}
-            error={!!fieldErrors["address.plz"]}
-            helperText={fieldErrors["address.plz"]}
-          />
-
-          <TextField
-            label="City"
-            fullWidth
-            value={customer.address.city}
-            onChange={handleInput("address.city")}
-            error={!!fieldErrors["address.city"]}
-            helperText={fieldErrors["address.city"]}
-          />
-        </Box>
-
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        <Box sx={{ mt: 2, display: "flex", gap: 1 }}>
-          <Button variant="outlined" onClick={() => navigate("/menu")}>
-            Back to Menu
-          </Button>
-          <Button
-            variant="contained"
-            onClick={preparePayment}
-            disabled={preparing}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { md: "1.1fr .9fr", xs: "1fr" },
+              gap: 2.5,
+            }}
           >
-            {preparing ? "Preparing…" : "Continue to payment"}
-          </Button>
+            <Elements
+              stripe={stripePromise}
+              options={{ clientSecret, appearance: { theme: "night" } }}
+            >
+              <PaymentStep />
+            </Elements>
+            <OrderSummary />
+          </Box>
         </Box>
       </Box>
     );
   }
 
+  // Step 1: Details
   return (
-    <Elements stripe={stripePromise} options={{ clientSecret }}>
-      <PaymentStep />
-    </Elements>
+    <Box sx={{ bgcolor: COLORS.bg, minHeight: "100vh", py: { xs: 2, md: 4 } }}>
+      <Box sx={{ maxWidth: 1040, mx: "auto", px: 2 }}>
+        <Typography
+          variant="h4"
+          sx={{ fontWeight: 900, color: COLORS.text, mb: 0.5 }}
+        >
+          Checkout
+        </Typography>
+        <Typography sx={{ color: COLORS.sub, mb: 2 }}>
+          Please provide your contact and address details.
+        </Typography>
+
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Chip
+            label="1. Details"
+            sx={{ bgcolor: COLORS.accent, color: "#0B2D24", fontWeight: 700 }}
+          />
+          <Chip
+            label="2. Payment"
+            variant="outlined"
+            sx={{ color: COLORS.muted, borderColor: COLORS.stroke }}
+          />
+        </Stack>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { md: "1.1fr .9fr", xs: "1fr" },
+            gap: 2.5,
+          }}
+        >
+          {/* Left: Form */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 3 },
+              bgcolor: COLORS.card,
+              border: `1px solid ${COLORS.stroke}`,
+              borderRadius: 3,
+            }}
+          >
+            <Typography sx={{ fontWeight: 800, mb: 1.5, color: COLORS.text }}>
+              Your details
+            </Typography>
+
+            <Box
+              component="form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void preparePayment();
+              }}
+              sx={{
+                display: "grid",
+                gap: 1.5,
+                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+              }}
+            >
+              <TextField
+                {...TF_PROPS}
+                label="First name"
+                value={customer.firstName}
+                onChange={handleInput("firstName")}
+                error={!!fieldErrors.firstName}
+                helperText={fieldErrors.firstName}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="Last name"
+                value={customer.lastName}
+                onChange={handleInput("lastName")}
+                error={!!fieldErrors.lastName}
+                helperText={fieldErrors.lastName}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="Email"
+                type="email"
+                value={customer.email}
+                onChange={handleInput("email")}
+                error={!!fieldErrors.email}
+                helperText={fieldErrors.email}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="Phone"
+                value={customer.phone}
+                onChange={handleInput("phone")}
+                error={!!fieldErrors.phone}
+                helperText={fieldErrors.phone}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="Street"
+                value={customer.address.street}
+                onChange={handleInput("address.street")}
+                error={!!fieldErrors["address.street"]}
+                helperText={fieldErrors["address.street"]}
+                sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="No."
+                value={customer.address.streetNo}
+                onChange={handleInput("address.streetNo")}
+                error={!!fieldErrors["address.streetNo"]}
+                helperText={fieldErrors["address.streetNo"]}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="PLZ"
+                value={customer.address.plz}
+                onChange={handleInput("address.plz")}
+                error={!!fieldErrors["address.plz"]}
+                helperText={fieldErrors["address.plz"]}
+              />
+
+              <TextField
+                {...TF_PROPS}
+                label="City"
+                value={customer.address.city}
+                onChange={handleInput("address.city")}
+                error={!!fieldErrors["address.city"]}
+                helperText={fieldErrors["address.city"]}
+              />
+            </Box>
+
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {error}
+              </Alert>
+            )}
+
+            <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={() => navigate("/menu")}
+                sx={{
+                  color: COLORS.text,
+                  borderColor: COLORS.stroke,
+                  "&:hover": { borderColor: COLORS.sub },
+                }}
+              >
+                Back to Menu
+              </Button>
+              <Button
+                variant="contained"
+                onClick={preparePayment}
+                disabled={preparing}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 700,
+                  bgcolor: COLORS.accent,
+                  color: "#0B2D24",
+                  "&:hover": { bgcolor: "#eab833" },
+                }}
+              >
+                {preparing ? "Preparing…" : "Continue to payment"}
+              </Button>
+            </Stack>
+          </Paper>
+
+          {/* Right: Order summary */}
+          <OrderSummary />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+/* --------- Right column: summary card --------- */
+function OrderSummary() {
+  const { state, total } = useCart();
+  const lines = React.useMemo(() => {
+    const anyState = state as any;
+    return (anyState.lines ?? anyState.items ?? []) as Array<{
+      key?: string;
+      name?: string;
+      priceChf?: number;
+      quantity: number;
+    }>;
+  }, [state]);
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2, md: 3 },
+        bgcolor: COLORS.card,
+        border: `1px solid ${COLORS.stroke}`,
+        borderRadius: 3,
+        position: { md: "sticky" },
+        top: { md: 24 },
+        alignSelf: "start",
+      }}
+    >
+      <Typography sx={{ fontWeight: 800, mb: 1.5, color: COLORS.text }}>
+        Order summary
+      </Typography>
+
+      {lines.length === 0 ? (
+        <Typography sx={{ color: COLORS.muted }}>
+          Your cart is empty.
+        </Typography>
+      ) : (
+        <>
+          <Stack
+            divider={<Divider sx={{ borderColor: COLORS.stroke }} />}
+            spacing={1}
+          >
+            {lines.map((l, i) => (
+              <Box
+                key={l.key ?? i}
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 1,
+                }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    sx={{ color: COLORS.text, fontWeight: 600 }}
+                    noWrap
+                  >
+                    {l.name ?? "Item"}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: COLORS.muted }}>
+                    × {l.quantity}
+                  </Typography>
+                </Box>
+                <Typography sx={{ color: COLORS.text, fontWeight: 700 }}>
+                  CHF {(l.priceChf ? l.priceChf * l.quantity : 0).toFixed(2)}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+
+          <Divider sx={{ my: 2, borderColor: COLORS.stroke }} />
+
+          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+            <Typography sx={{ color: COLORS.sub, fontWeight: 700 }}>
+              Total
+            </Typography>
+            <Typography sx={{ color: COLORS.text, fontWeight: 900 }}>
+              CHF {total.toFixed(2)}
+            </Typography>
+          </Box>
+
+          <Typography
+            variant="caption"
+            sx={{ display: "block", mt: 1, color: COLORS.muted }}
+          >
+            Taxes are calculated on the payment step.
+          </Typography>
+        </>
+      )}
+    </Paper>
   );
 }

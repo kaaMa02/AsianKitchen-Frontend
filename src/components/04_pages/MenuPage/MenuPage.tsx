@@ -1,4 +1,3 @@
-// src/components/04_pages/MenuPage/MenuPage.tsx
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import MuiContainer from '@mui/material/Container';
