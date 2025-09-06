@@ -13,8 +13,9 @@ import {
   TextField,
   Paper,
   Divider,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
-
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
 import {
@@ -32,38 +33,27 @@ import {
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// --- helpers ---
+const VAT_RATE = 0.026;
 
-const fmtChf = (n: number) =>
-  new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF" }).format(
-    n
-  );
+type Errors = Record<string, string>;
 
-const calcDeliveryFee = (orderType: OrderType, subtotal: number): number => {
-  if (orderType !== OrderType.DELIVERY) return 0;
-  if (subtotal > 50) return 5;
-  if (subtotal > 25 && subtotal < 50) return 3;
-  return 0;
+const emptyCustomer: CustomerInfoDTO = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-// Make labels lighter (to match your design)
-const lightLabelSx = { color: "rgba(11,45,36,0.6)" };
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
 
-// Gold button style (like before)
-const goldBtnSx = {
-  bgcolor: "#C8A44B",
-  color: "#0B2D24",
-  fontWeight: 700,
-  "&:hover": { bgcolor: "#b8953e" },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Payment step (renders Stripe Payment Element)
-
-function PaymentStep({ totalDue }: { totalDue: number }) {
+function PaymentStep() {
   const stripe = useStripe();
   const elements = useElements();
+  const { total } = useCart();
   const [submitting, setSubmitting] = React.useState(false);
 
   const onPay = async () => {
@@ -86,32 +76,24 @@ function PaymentStep({ totalDue }: { totalDue: number }) {
         disabled={!stripe || submitting}
         variant="contained"
         onClick={onPay}
-        sx={goldBtnSx}
+        sx={{
+          bgcolor: "#C9A227",
+          color: "#0B2D24",
+          fontWeight: 700,
+          "&:hover": { bgcolor: "#B8941F" },
+        }}
       >
-        Pay {fmtChf(totalDue)}
+        Pay CHF {total.toFixed(2)}
       </Button>
     </Box>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page
-
-type Errors = Record<string, string>;
-
-const emptyCustomer: CustomerInfoDTO = {
-  firstName: "",
-  lastName: "",
-  email: "",
-  phone: "",
-  address: { street: "", streetNo: "", plz: "", city: "" },
-};
-
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { state, total } = useCart(); // `total` is your cart subtotal (items)
+  const { state, setOrderType } = useCart();
 
-  // Local state
+  // ── local state
   const [clientSecret, setClientSecret] = React.useState<string>();
   const [error, setError] = React.useState<string>();
   const [preparing, setPreparing] = React.useState(false);
@@ -119,23 +101,46 @@ export default function CheckoutPage() {
     React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
 
-  // Normalize cart lines
-  const cartLines = React.useMemo(() => {
+  // normalize lines & compute prices for the summary
+  const lines = React.useMemo(() => {
     const anyState = state as any;
-    return (anyState.lines ?? anyState.items ?? []) as Array<{
-      kind: "MENU" | "BUFFET";
-      id: string;
-      quantity: number;
-    }>;
+    const raw = (anyState.lines ?? anyState.items ?? []) as Array<any>;
+    return raw.map((l) => ({
+      kind: (l.kind as "MENU" | "BUFFET") ?? "MENU",
+      id: String(l.id ?? l.menuItemId ?? l.buffetItemId ?? ""),
+      quantity: Number(l.quantity ?? 1),
+      unitPrice:
+        typeof l.priceChf !== "undefined"
+          ? Number(l.priceChf)
+          : typeof l.price !== "undefined"
+          ? Number(l.price)
+          : 0,
+      name: l.name ?? "",
+      key: l.key ?? `${l.id ?? l.menuItemId ?? l.buffetItemId}`,
+    }));
   }, [state]);
 
-  // Delivery fee & totals
   const orderType: OrderType = state.orderType;
-  const subtotal = Number(total ?? 0);
-  const deliveryFee = calcDeliveryFee(orderType, subtotal);
-  const totalDue = subtotal + deliveryFee;
 
-  // Validation (matches backend @NotBlank etc.)
+  const summary = React.useMemo(() => {
+    const subtotal = round2(
+      lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0)
+    );
+
+    const vat = round2(subtotal * VAT_RATE);
+
+    let deliveryFee = 0;
+    if (orderType === "DELIVERY") {
+      if (subtotal > 25 && subtotal < 50) deliveryFee = 3;
+      else if (subtotal > 50) deliveryFee = 5;
+    }
+
+    const total = round2(subtotal + vat + deliveryFee);
+
+    return { subtotal, vat, deliveryFee, total };
+  }, [lines, orderType]);
+
+  // validation
   const validate = (c: CustomerInfoDTO): Errors => {
     const e: Errors = {};
     const req = (v?: string) => !v || !v.trim();
@@ -146,7 +151,7 @@ export default function CheckoutPage() {
       e.email = "Valid email required";
     if (req(c.phone)) e.phone = "Required";
 
-    // Backend currently requires address for orders (delivery & takeaway)
+    // Address required for both types (owner’s request)
     if (req(c.address.street)) e["address.street"] = "Required";
     if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
     if (req(c.address.plz)) e["address.plz"] = "Required";
@@ -155,11 +160,10 @@ export default function CheckoutPage() {
     return e;
   };
 
-  // Map backend validation errors to fields
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
     Object.entries(details).forEach(([k, v]) => {
-      const short = k.replace(/^customerInfo\./, ""); // e.g. "customerInfo.address.plz" -> "address.plz"
+      const short = k.replace(/^customerInfo\./, "");
       mapped[short] = v;
     });
     setFieldErrors(mapped);
@@ -200,19 +204,18 @@ export default function CheckoutPage() {
       });
     };
 
-  // Create order + PI after collecting details
   const preparePayment = async () => {
     try {
       setError(undefined);
       setFieldErrors({});
 
-      if (!cartLines.length) {
+      if (!lines.length) {
         setError("Your cart is empty.");
         return;
       }
 
-      const hasMenu = cartLines.some((l) => l.kind === "MENU");
-      const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
+      const hasMenu = lines.some((l) => l.kind === "MENU");
+      const hasBuffet = lines.some((l) => l.kind === "BUFFET");
       if (hasMenu && hasBuffet) {
         setError(
           "Mixed cart (menu + buffet) is not supported yet. Please order them separately."
@@ -235,13 +238,8 @@ export default function CheckoutPage() {
           userId: undefined,
           customerInfo: customer,
           orderType,
-          // NOTE: backend currently doesn't store a delivery fee field.
-          // You can temporarily drop the fee note in specialInstructions:
-          specialInstructions:
-            deliveryFee > 0
-              ? `Delivery fee to apply: ${deliveryFee.toFixed(2)} CHF`
-              : undefined,
-          items: cartLines.map((l) => ({
+          specialInstructions: undefined,
+          items: lines.map((l) => ({
             menuItemId: l.id,
             quantity: l.quantity,
           })),
@@ -249,16 +247,13 @@ export default function CheckoutPage() {
         const order = await createCustomerOrder(payload);
         const pi = await createIntentForCustomerOrder(order.id);
         setClientSecret(pi.clientSecret);
-      } else if (hasBuffet) {
+      } else {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
           customerInfo: customer,
           orderType,
-          specialInstructions:
-            deliveryFee > 0
-              ? `Delivery fee to apply: ${deliveryFee.toFixed(2)} CHF`
-              : undefined,
-          items: cartLines.map((l) => ({
+          specialInstructions: undefined,
+          items: lines.map((l) => ({
             buffetItemId: l.id,
             quantity: l.quantity,
           })),
@@ -283,33 +278,39 @@ export default function CheckoutPage() {
     }
   };
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // RENDER
-
+  // ── render
   if (!clientSecret) {
     return (
-      <Box sx={{ p: 3, maxWidth: 980, mx: "auto", display: "grid", gap: 3 }}>
-        <Typography
-          variant="h5"
-          sx={{ fontWeight: 800, color: "#0B2D24", letterSpacing: 0.2 }}
-        >
-          Checkout
-        </Typography>
+      <Box sx={{ p: 3, maxWidth: 980, mx: "auto", display: "grid", gap: 2 }}>
+        {/* order type toggle */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#0B2D24" }}>
+            Checkout
+          </Typography>
+          <ToggleButtonGroup
+            value={orderType}
+            exclusive
+            onChange={(_, v: OrderType | null) => v && setOrderType(v)}
+            size="small"
+          >
+            <ToggleButton value={OrderType.TAKEAWAY}>Takeaway</ToggleButton>
+            <ToggleButton value={OrderType.DELIVERY}>Delivery</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
 
-        {/* Layout: details (left) + summary (right) */}
         <Box
           sx={{
             display: "grid",
+            gap: 2,
             gridTemplateColumns: { xs: "1fr", md: "1fr 360px" },
-            gap: 3,
             alignItems: "start",
           }}
         >
-          {/* Details card */}
-          <Paper elevation={1} sx={{ p: 2.5 }}>
+          {/* left: details */}
+          <Paper elevation={0} sx={{ p: 2, border: "1px solid #e5e7eb" }}>
             <Typography
-              variant="h6"
-              sx={{ mb: 1.5, fontWeight: 800, color: "#0B2D24" }}
+              variant="subtitle1"
+              sx={{ mb: 1.5, fontWeight: 700, color: "#0B2D24" }}
             >
               Your details
             </Typography>
@@ -328,9 +329,8 @@ export default function CheckoutPage() {
                 onChange={handleInput("firstName")}
                 error={!!fieldErrors.firstName}
                 helperText={fieldErrors.firstName}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
-
               <TextField
                 label="Last name"
                 fullWidth
@@ -338,9 +338,8 @@ export default function CheckoutPage() {
                 onChange={handleInput("lastName")}
                 error={!!fieldErrors.lastName}
                 helperText={fieldErrors.lastName}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
-
               <TextField
                 label="Email"
                 type="email"
@@ -349,9 +348,8 @@ export default function CheckoutPage() {
                 onChange={handleInput("email")}
                 error={!!fieldErrors.email}
                 helperText={fieldErrors.email}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
-
               <TextField
                 label="Phone"
                 fullWidth
@@ -359,9 +357,8 @@ export default function CheckoutPage() {
                 onChange={handleInput("phone")}
                 error={!!fieldErrors.phone}
                 helperText={fieldErrors.phone}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
-
               <TextField
                 label="Street"
                 fullWidth
@@ -369,10 +366,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.street")}
                 error={!!fieldErrors["address.street"]}
                 helperText={fieldErrors["address.street"]}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
                 sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
               />
-
               <TextField
                 label="No."
                 fullWidth
@@ -380,9 +376,8 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.streetNo")}
                 error={!!fieldErrors["address.streetNo"]}
                 helperText={fieldErrors["address.streetNo"]}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
-
               <TextField
                 label="PLZ"
                 fullWidth
@@ -390,9 +385,8 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.plz")}
                 error={!!fieldErrors["address.plz"]}
                 helperText={fieldErrors["address.plz"]}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
-
               <TextField
                 label="City"
                 fullWidth
@@ -400,7 +394,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.city")}
                 error={!!fieldErrors["address.city"]}
                 helperText={fieldErrors["address.city"]}
-                InputLabelProps={{ sx: lightLabelSx }}
+                InputLabelProps={{ sx: { color: "text.secondary" } }}
               />
             </Box>
 
@@ -418,91 +412,69 @@ export default function CheckoutPage() {
                 variant="contained"
                 onClick={preparePayment}
                 disabled={preparing}
-                sx={goldBtnSx}
+                sx={{
+                  bgcolor: "#C9A227",
+                  color: "#0B2D24",
+                  fontWeight: 700,
+                  "&:hover": { bgcolor: "#B8941F" },
+                }}
               >
                 {preparing ? "Preparing…" : "Continue to payment"}
               </Button>
             </Box>
           </Paper>
 
-          {/* Order summary */}
-          <Paper elevation={1} sx={{ p: 2.5 }}>
+          {/* right: summary */}
+          <Paper elevation={0} sx={{ p: 2, border: "1px solid #e5e7eb" }}>
             <Typography
-              variant="h6"
-              sx={{ mb: 1.5, fontWeight: 800, color: "#0B2D24" }}
+              variant="subtitle1"
+              sx={{ mb: 1.5, fontWeight: 700, color: "#0B2D24" }}
             >
               Order summary
             </Typography>
 
             <Box sx={{ display: "grid", gap: 1 }}>
-              <Row label="Subtotal" value={fmtChf(subtotal)} />
-              {orderType === OrderType.DELIVERY && (
-                <Row
-                  label="Delivery fee"
-                  value={fmtChf(deliveryFee)}
-                  faded={deliveryFee === 0}
-                />
-              )}
+              <Row label="Subtotal" value={`CHF ${summary.subtotal.toFixed(2)}`} />
+              <Row label={`VAT (2.6%)`} value={`CHF ${summary.vat.toFixed(2)}`} />
+              <Row
+                label="Delivery fee"
+                value={
+                  orderType === "DELIVERY"
+                    ? `CHF ${summary.deliveryFee.toFixed(2)}`
+                    : "—"
+                }
+              />
               <Divider sx={{ my: 1 }} />
               <Row
-                label="Total due"
-                value={fmtChf(totalDue)}
-                strong
-                large
+                label={<strong>Total</strong>}
+                value={<strong>{`CHF ${summary.total.toFixed(2)}`}</strong>}
               />
             </Box>
-
-            <Typography sx={{ mt: 1.5, fontSize: 12, color: "rgba(0,0,0,0.55)" }}>
-              * Delivery fee applies only to delivery orders. Your card will be
-              charged the amount shown on the payment step.
-            </Typography>
           </Paper>
         </Box>
       </Box>
     );
   }
 
-  // Payment step
+  // payment step
   return (
     <Elements stripe={stripePromise} options={{ clientSecret }}>
-      <Box sx={{ p: 3, maxWidth: 720, mx: "auto", display: "grid", gap: 2 }}>
-        <Typography
-          variant="h6"
-          sx={{ fontWeight: 800, color: "#0B2D24" }}
-        >
-          Payment
-        </Typography>
-        <PaymentStep totalDue={totalDue} />
-      </Box>
+      <PaymentStep />
     </Elements>
   );
 }
 
-// Small row component for summary
+// small helper for summary rows
 function Row({
   label,
   value,
-  strong,
-  large,
-  faded,
 }: {
-  label: string;
-  value: string;
-  strong?: boolean;
-  large?: boolean;
-  faded?: boolean;
+  label: React.ReactNode;
+  value: React.ReactNode;
 }) {
   return (
-    <Box
-      sx={{
-        display: "flex",
-        justifyContent: "space-between",
-        color: faded ? "rgba(0,0,0,0.5)" : "#0B2D24",
-        fontWeight: strong ? 800 : 600,
-        fontSize: large ? 18 : 14,
-      }}
-    >
-      <span>{label}</span>
+    <Box sx={{ display: "flex", justifyContent: "space-between", color: "#0B2D24" }}>
+      <span style={{ opacity: 0.8 }}>{label}</span>
       <span>{value}</span>
     </Box>
   );
