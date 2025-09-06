@@ -1,6 +1,10 @@
-// src/components/04_pages/CheckoutPage/CheckoutPage.tsx
 import * as React from "react";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 import {
   Box,
   Button,
@@ -10,57 +14,56 @@ import {
   Paper,
   Divider,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
 
 import { useCart } from "../../../contexts/CartContext";
-import type {
+import { useNavigate } from "react-router-dom";
+import {
   OrderType,
   BuffetOrderWriteDTO,
   CustomerOrderWriteDTO,
   CustomerInfoDTO,
 } from "../../../types/api-types";
-
 import { createBuffetOrder } from "../../../services/buffetOrders";
 import { createCustomerOrder } from "../../../services/customerOrders";
 import {
   createIntentForBuffetOrder,
   createIntentForCustomerOrder,
 } from "../../../services/payment";
-import { ensureCsrf } from "../../../services/http";
 import { stripePromise } from "../../../stripe";
+import { ensureCsrf } from "../../../services/http";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Display VAT — keep this in sync with the backend
-const VAT_RATE = 0.026;
+// Helpers
 
-// Brand colors
-const GOLD = "#C9A227";
-const GOLD_HOVER = "#B38E1E";
+const fmtChf = (n: number) =>
+  new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF" }).format(
+    n
+  );
 
-type Errors = Record<string, string>;
-
-const emptyCustomer: CustomerInfoDTO = {
-  firstName: "",
-  lastName: "",
-  email: "",
-  phone: "",
-  address: { street: "", streetNo: "", plz: "", city: "" },
+const calcDeliveryFee = (orderType: OrderType, subtotal: number): number => {
+  if (orderType !== OrderType.DELIVERY) return 0;
+  if (subtotal > 50) return 5;
+  if (subtotal > 25 && subtotal < 50) return 3;
+  return 0;
 };
 
-// Small helper to 2-decimals
-const chf = (n: number) => `CHF ${n.toFixed(2)}`;
+// Make labels lighter (to match your design)
+const lightLabelSx = { color: "rgba(11,45,36,0.6)" };
+
+// Gold button style (like before)
+const goldBtnSx = {
+  bgcolor: "#C8A44B",
+  color: "#0B2D24",
+  fontWeight: 700,
+  "&:hover": { bgcolor: "#b8953e" },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Payment step (Stripe UI)
-function PaymentStep() {
+// Payment step (renders Stripe Payment Element)
+
+function PaymentStep({ totalDue }: { totalDue: number }) {
   const stripe = useStripe();
   const elements = useElements();
-  const { total } = useCart();
-
-  // Match backend by showing total + VAT
-  const estimatedVat = React.useMemo(() => total * VAT_RATE, [total]);
-  const estimatedGrand = React.useMemo(() => total + estimatedVat, [total, estimatedVat]);
-
   const [submitting, setSubmitting] = React.useState(false);
 
   const onPay = async () => {
@@ -83,56 +86,67 @@ function PaymentStep() {
         disabled={!stripe || submitting}
         variant="contained"
         onClick={onPay}
-        sx={{ bgcolor: GOLD, "&:hover": { bgcolor: GOLD_HOVER } }}
+        sx={goldBtnSx}
       >
-        Pay {chf(estimatedGrand)}
+        Pay {fmtChf(totalDue)}
       </Button>
-      <Typography variant="body2" sx={{ opacity: 0.7, textAlign: "center" }}>
-        You’ll be charged the total shown above (incl. VAT).
-      </Typography>
     </Box>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main page
+// Page
+
+type Errors = Record<string, string>;
+
+const emptyCustomer: CustomerInfoDTO = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: { street: "", streetNo: "", plz: "", city: "" },
+};
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { state, total } = useCart();
+  const { state, total } = useCart(); // `total` is your cart subtotal (items)
 
-  // Hooks: keep all at top, no early returns before hooks
+  // Local state
   const [clientSecret, setClientSecret] = React.useState<string>();
   const [error, setError] = React.useState<string>();
   const [preparing, setPreparing] = React.useState(false);
-  const [customer, setCustomer] = React.useState<CustomerInfoDTO>(emptyCustomer);
+  const [customer, setCustomer] =
+    React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
 
-  // Cart lines (normalize shapes)
+  // Normalize cart lines
   const cartLines = React.useMemo(() => {
     const anyState = state as any;
     return (anyState.lines ?? anyState.items ?? []) as Array<{
       kind: "MENU" | "BUFFET";
       id: string;
       quantity: number;
-      priceChf?: number;
     }>;
   }, [state]);
 
-  // Summary (display only)
-  const estimatedVat = React.useMemo(() => total * VAT_RATE, [total]);
-  const estimatedGrand = React.useMemo(() => total + estimatedVat, [total, estimatedVat]);
+  // Delivery fee & totals
+  const orderType: OrderType = state.orderType;
+  const subtotal = Number(total ?? 0);
+  const deliveryFee = calcDeliveryFee(orderType, subtotal);
+  const totalDue = subtotal + deliveryFee;
 
-  // Validation (mirror backend NotBlank)
+  // Validation (matches backend @NotBlank etc.)
   const validate = (c: CustomerInfoDTO): Errors => {
     const e: Errors = {};
     const req = (v?: string) => !v || !v.trim();
 
     if (req(c.firstName)) e.firstName = "Required";
     if (req(c.lastName)) e.lastName = "Required";
-    if (req(c.email) || !/.+@.+\..+/.test(c.email)) e.email = "Valid email required";
+    if (req(c.email) || !/.+@.+\..+/.test(c.email))
+      e.email = "Valid email required";
     if (req(c.phone)) e.phone = "Required";
 
-    // Address required for both delivery and takeaway (as per backend)
+    // Backend currently requires address for orders (delivery & takeaway)
     if (req(c.address.street)) e["address.street"] = "Required";
     if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
     if (req(c.address.plz)) e["address.plz"] = "Required";
@@ -141,20 +155,18 @@ export default function CheckoutPage() {
     return e;
   };
 
-  // Map backend validation paths → field names
+  // Map backend validation errors to fields
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
     Object.entries(details).forEach(([k, v]) => {
-      const short = k.replace(/^customerInfo\./, ""); // e.g. customerInfo.address.plz → address.plz
+      const short = k.replace(/^customerInfo\./, ""); // e.g. "customerInfo.address.plz" -> "address.plz"
       mapped[short] = v;
     });
     setFieldErrors(mapped);
   };
 
-  // Controlled inputs
   const handleInput =
-    (path: string) =>
-    (ev: React.ChangeEvent<HTMLInputElement>) => {
+    (path: string) => (ev: React.ChangeEvent<HTMLInputElement>) => {
       const v = ev.target.value;
       setCustomer((prev) => {
         const next = { ...prev, address: { ...prev.address } };
@@ -188,7 +200,7 @@ export default function CheckoutPage() {
       });
     };
 
-  // Prepare PaymentIntent after collecting details
+  // Create order + PI after collecting details
   const preparePayment = async () => {
     try {
       setError(undefined);
@@ -202,7 +214,9 @@ export default function CheckoutPage() {
       const hasMenu = cartLines.some((l) => l.kind === "MENU");
       const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
       if (hasMenu && hasBuffet) {
-        setError("Mixed cart (menu + buffet) is not supported yet. Please order them separately.");
+        setError(
+          "Mixed cart (menu + buffet) is not supported yet. Please order them separately."
+        );
         return;
       }
 
@@ -216,15 +230,21 @@ export default function CheckoutPage() {
       setPreparing(true);
       await ensureCsrf();
 
-      const orderType: OrderType = state.orderType;
-
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
           userId: undefined,
           customerInfo: customer,
           orderType,
-          specialInstructions: undefined,
-          items: cartLines.map((l) => ({ menuItemId: l.id, quantity: l.quantity })),
+          // NOTE: backend currently doesn't store a delivery fee field.
+          // You can temporarily drop the fee note in specialInstructions:
+          specialInstructions:
+            deliveryFee > 0
+              ? `Delivery fee to apply: ${deliveryFee.toFixed(2)} CHF`
+              : undefined,
+          items: cartLines.map((l) => ({
+            menuItemId: l.id,
+            quantity: l.quantity,
+          })),
         };
         const order = await createCustomerOrder(payload);
         const pi = await createIntentForCustomerOrder(order.id);
@@ -234,8 +254,14 @@ export default function CheckoutPage() {
           userId: undefined,
           customerInfo: customer,
           orderType,
-          specialInstructions: undefined,
-          items: cartLines.map((l) => ({ buffetItemId: l.id, quantity: l.quantity })),
+          specialInstructions:
+            deliveryFee > 0
+              ? `Delivery fee to apply: ${deliveryFee.toFixed(2)} CHF`
+              : undefined,
+          items: cartLines.map((l) => ({
+            buffetItemId: l.id,
+            quantity: l.quantity,
+          })),
         };
         const order = await createBuffetOrder(payload);
         const pi = await createIntentForBuffetOrder(order.id);
@@ -243,7 +269,9 @@ export default function CheckoutPage() {
       }
     } catch (e: any) {
       console.error(e);
-      const details = e?.response?.data?.details as Record<string, string> | undefined;
+      const details = e?.response?.data?.details as
+        | Record<string, string>
+        | undefined;
       if (details) {
         applyBackendErrors(details);
         setError("Please correct the highlighted fields.");
@@ -256,26 +284,35 @@ export default function CheckoutPage() {
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Render
+  // RENDER
 
   if (!clientSecret) {
     return (
-      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 980, mx: "auto" }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, color: "#0B2D24", mb: 2 }}>
+      <Box sx={{ p: 3, maxWidth: 980, mx: "auto", display: "grid", gap: 3 }}>
+        <Typography
+          variant="h5"
+          sx={{ fontWeight: 800, color: "#0B2D24", letterSpacing: 0.2 }}
+        >
           Checkout
         </Typography>
 
+        {/* Layout: details (left) + summary (right) */}
         <Box
           sx={{
             display: "grid",
-            gap: 2,
-            gridTemplateColumns: { xs: "1fr", md: "2fr 1fr" },
+            gridTemplateColumns: { xs: "1fr", md: "1fr 360px" },
+            gap: 3,
             alignItems: "start",
           }}
         >
-          {/* Left: Details */}
-          <Paper elevation={0} sx={{ p: 2, border: "1px solid #e5e7eb", borderRadius: 2 }}>
-            <Typography sx={{ fontWeight: 700, color: "#0B2D24", mb: 1.5 }}>Your details</Typography>
+          {/* Details card */}
+          <Paper elevation={1} sx={{ p: 2.5 }}>
+            <Typography
+              variant="h6"
+              sx={{ mb: 1.5, fontWeight: 800, color: "#0B2D24" }}
+            >
+              Your details
+            </Typography>
 
             <Box
               sx={{
@@ -291,8 +328,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("firstName")}
                 error={!!fieldErrors.firstName}
                 helperText={fieldErrors.firstName}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
+
               <TextField
                 label="Last name"
                 fullWidth
@@ -300,7 +338,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("lastName")}
                 error={!!fieldErrors.lastName}
                 helperText={fieldErrors.lastName}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
 
               <TextField
@@ -311,8 +349,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("email")}
                 error={!!fieldErrors.email}
                 helperText={fieldErrors.email}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
+
               <TextField
                 label="Phone"
                 fullWidth
@@ -320,7 +359,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("phone")}
                 error={!!fieldErrors.phone}
                 helperText={fieldErrors.phone}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
 
               <TextField
@@ -330,9 +369,10 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.street")}
                 error={!!fieldErrors["address.street"]}
                 helperText={fieldErrors["address.street"]}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
                 sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
               />
+
               <TextField
                 label="No."
                 fullWidth
@@ -340,7 +380,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.streetNo")}
                 error={!!fieldErrors["address.streetNo"]}
                 helperText={fieldErrors["address.streetNo"]}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
 
               <TextField
@@ -350,8 +390,9 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.plz")}
                 error={!!fieldErrors["address.plz"]}
                 helperText={fieldErrors["address.plz"]}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
+
               <TextField
                 label="City"
                 fullWidth
@@ -359,7 +400,7 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.city")}
                 error={!!fieldErrors["address.city"]}
                 helperText={fieldErrors["address.city"]}
-                InputLabelProps={{ sx: { color: "rgba(11,45,36,0.6)" } }}
+                InputLabelProps={{ sx: lightLabelSx }}
               />
             </Box>
 
@@ -377,25 +418,43 @@ export default function CheckoutPage() {
                 variant="contained"
                 onClick={preparePayment}
                 disabled={preparing}
-                sx={{ bgcolor: GOLD, "&:hover": { bgcolor: GOLD_HOVER } }}
+                sx={goldBtnSx}
               >
                 {preparing ? "Preparing…" : "Continue to payment"}
               </Button>
             </Box>
           </Paper>
 
-          {/* Right: Summary */}
-          <Paper elevation={0} sx={{ p: 2, border: "1px solid #e5e7eb", borderRadius: 2 }}>
-            <Typography sx={{ fontWeight: 700, color: "#0B2D24" }}>Order summary</Typography>
-            <Divider sx={{ my: 1.5 }} />
-            <Box sx={{ display: "grid", gap: 0.75 }}>
-              <Row label="Subtotal" value={chf(total)} />
-              <Row label={`VAT (${(VAT_RATE * 100).toFixed(1)}%)`} value={chf(estimatedVat)} />
+          {/* Order summary */}
+          <Paper elevation={1} sx={{ p: 2.5 }}>
+            <Typography
+              variant="h6"
+              sx={{ mb: 1.5, fontWeight: 800, color: "#0B2D24" }}
+            >
+              Order summary
+            </Typography>
+
+            <Box sx={{ display: "grid", gap: 1 }}>
+              <Row label="Subtotal" value={fmtChf(subtotal)} />
+              {orderType === OrderType.DELIVERY && (
+                <Row
+                  label="Delivery fee"
+                  value={fmtChf(deliveryFee)}
+                  faded={deliveryFee === 0}
+                />
+              )}
               <Divider sx={{ my: 1 }} />
-              <Row label="Total (incl. VAT)" value={chf(estimatedGrand)} bold />
+              <Row
+                label="Total due"
+                value={fmtChf(totalDue)}
+                strong
+                large
+              />
             </Box>
-            <Typography variant="caption" sx={{ mt: 1.5, display: "block", opacity: 0.7 }}>
-              The final amount charged will match this total.
+
+            <Typography sx={{ mt: 1.5, fontSize: 12, color: "rgba(0,0,0,0.55)" }}>
+              * Delivery fee applies only to delivery orders. Your card will be
+              charged the amount shown on the payment step.
             </Typography>
           </Paper>
         </Box>
@@ -403,25 +462,48 @@ export default function CheckoutPage() {
     );
   }
 
-  // Stripe payment step
+  // Payment step
   return (
     <Elements stripe={stripePromise} options={{ clientSecret }}>
-      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: "auto" }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, color: "#0B2D24", mb: 2 }}>
-          Secure payment
+      <Box sx={{ p: 3, maxWidth: 720, mx: "auto", display: "grid", gap: 2 }}>
+        <Typography
+          variant="h6"
+          sx={{ fontWeight: 800, color: "#0B2D24" }}
+        >
+          Payment
         </Typography>
-        <PaymentStep />
+        <PaymentStep totalDue={totalDue} />
       </Box>
     </Elements>
   );
 }
 
-// Simple label/value row
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+// Small row component for summary
+function Row({
+  label,
+  value,
+  strong,
+  large,
+  faded,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  large?: boolean;
+  faded?: boolean;
+}) {
   return (
-    <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-      <Typography sx={{ opacity: 0.85 }}>{label}</Typography>
-      <Typography sx={{ fontWeight: bold ? 800 : 600 }}>{value}</Typography>
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "space-between",
+        color: faded ? "rgba(0,0,0,0.5)" : "#0B2D24",
+        fontWeight: strong ? 800 : 600,
+        fontSize: large ? 18 : 14,
+      }}
+    >
+      <span>{label}</span>
+      <span>{value}</span>
     </Box>
   );
 }
