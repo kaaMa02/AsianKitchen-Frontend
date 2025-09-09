@@ -1,4 +1,3 @@
-import * as React from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
@@ -14,10 +13,14 @@ const cardSx = {
   p: { xs: 3, md: 4 },
 } as const;
 
-const FEES = [
-  { color: '#F0802A', min: 'CHF 20.00', fee: 'CHF 0.00' },
-  { color: '#3BB9A3', min: 'CHF 50.00', fee: 'CHF 5.00' },
-  { color: '#E6A91A', min: 'CHF 80.00', fee: 'CHF 6.00' },
+function formatChf(n: number) {
+  return `CHF ${n.toFixed(2)}`;
+}
+
+const FEE_RULES = [
+  { color: '#F0802A', label: 'Up to CHF 25.00', fee: 0 },
+  { color: '#3BB9A3', label: 'Over CHF 25.00 and under CHF 50.00', fee: 3.00 },
+  { color: '#E6A91A', label: 'Over CHF 50.00', fee: 5.00 },
 ];
 
 function parseOpeningHours(src: string) {
@@ -69,17 +72,22 @@ export default function InfoCard() {
       {/* Delivery fees */}
       <Typography variant="h5" sx={{ color: '#0B2D24', fontWeight: 800, mb: 1.5 }}>
         <span role="img" aria-label="delivery">🚚</span>{' '}
-        Delivery fees
+        Delivery fees (Delivery orders only)
       </Typography>
 
       <List disablePadding>
-        {FEES.map((row, idx) => (
+        {FEE_RULES.map((row, idx) => (
           <ListItem key={idx} disableGutters sx={{ gap: 1.5, py: 0.75 }}>
-            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: row.color, flex: '0 0 auto', mt: '2px' }} />
+            <Box
+              sx={{
+                width: 12, height: 12, borderRadius: '50%',
+                bgcolor: row.color, flex: '0 0 auto', mt: '2px'
+              }}
+            />
             <ListItemText
               primary={
                 <Typography sx={{ color: '#0B2D24', fontSize: { xs: 16, md: 18 } }}>
-                  Min – {row.min}, Fee – {row.fee}
+                  {row.label} — Fee {formatChf(row.fee)}
                 </Typography>
               }
             />
