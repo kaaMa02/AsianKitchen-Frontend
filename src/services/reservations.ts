@@ -1,8 +1,14 @@
 import http from './http';
-import { ReservationReadDTO, ReservationWriteDTO, ReservationStatus } from '../types/api-types';
+import { ensureCsrf } from './http';
+import type {
+  ReservationReadDTO,
+  ReservationWriteDTO,
+  ReservationStatus,
+} from '../types/api-types';
 
 // Public
 export async function createReservation(dto: ReservationWriteDTO): Promise<ReservationReadDTO> {
+  await ensureCsrf(); // CSRF is enforced on POST /api/reservations in your backend config
   const { data } = await http.post<ReservationReadDTO>('/api/reservations', dto);
   return data;
 }
@@ -22,15 +28,12 @@ export async function deleteReservation(id: string): Promise<void> {
   await http.delete(`/api/reservations/${id}`);
 }
 
-// Admin
+// “Admin-ish” (your controller exposes these at /api/reservations/*)
 export async function listAllReservations(): Promise<ReservationReadDTO[]> {
-  const { data } = await http.get<ReservationReadDTO[]>('/api/admin/reservations');
+  const { data } = await http.get<ReservationReadDTO[]>('/api/reservations/all');
   return data;
 }
-export async function adminUpdateReservationStatus(id: string, status: ReservationStatus): Promise<ReservationReadDTO> {
-  const { data } = await http.patch<ReservationReadDTO>(`/api/admin/reservations/${id}/status`, { status });
+export async function listPendingReservations(): Promise<ReservationReadDTO[]> {
+  const { data } = await http.get<ReservationReadDTO[]>('/api/reservations/pending');
   return data;
-}
-export async function adminDeleteReservation(id: string): Promise<void> {
-  await http.delete(`/api/admin/reservations/${id}`);
 }
