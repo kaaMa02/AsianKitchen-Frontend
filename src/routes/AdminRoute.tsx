@@ -1,17 +1,20 @@
 // src/components/common/AdminRoute.tsx
 import * as React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-type Props = { children: React.ReactElement };
-
-export default function AdminRoute({ children }: Props) {
+export default function AdminRoute() {
   const { role } = useAuth();
-  const location = useLocation();
+  const loc = useLocation();
 
-  if (role !== 'ADMIN') {
-    const next = encodeURIComponent(location.pathname + location.search);
+  // treat any role that includes 'ADMIN' as admin
+  const isAdmin = !!role && role.toUpperCase().includes('ADMIN');
+
+  if (!isAdmin) {
+    const next = encodeURIComponent(loc.pathname + loc.search + loc.hash);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
-  return children;
+
+  // render nested /admin/* routes
+  return <Outlet />;
 }
