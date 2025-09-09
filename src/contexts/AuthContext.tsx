@@ -1,69 +1,62 @@
-import React, { createContext, useEffect, useState, ReactNode, FC } from 'react';
+// src/contexts/AuthContext.tsx
+import React, { createContext, useEffect, useState, ReactNode, FC, useContext } from 'react';
 import http from '../services/http';
 import { notifyError } from '../services/toast';
 import { Role } from '../types/api-types';
 
-interface AuthContextType {
+type AuthContextType = {
   role?: Role;
-  username?: string;
-  loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-}
+};
+
 export const AuthContext = createContext<AuthContextType>({
-  loading: true,
   login: async () => {},
   logout: async () => {},
 });
+
+export const useAuth = () => useContext(AuthContext);
 
 interface AuthProviderProps { children: ReactNode; }
 
 export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const [role, setRole] = useState<Role>();
-  const [username, setUsername] = useState<string>();
-  const [loading, setLoading] = useState(true);
 
   const fetchMe = async () => {
     try {
       const { data } = await http.get('/api/auth/me');
-      // backend returns { username, role }
-      setUsername(data?.username);
-      setRole(data?.role as Role | undefined);
+      // Backend sends e.g. "ROLE_ADMIN" / "ROLE_CUSTOMER"
+      const raw: string | undefined = data?.role;
+      const normalized = raw?.replace(/^ROLE_/, '') as Role | undefined; // "ADMIN" | "CUSTOMER"
+      setRole(normalized);
     } catch {
-      setUsername(undefined);
       setRole(undefined);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchMe();
-    const onLogout = () => { setRole(undefined); setUsername(undefined); };
+    const onLogout = () => setRole(undefined);
     window.addEventListener('auth:logout', onLogout);
     return () => window.removeEventListener('auth:logout', onLogout);
   }, []);
 
-  const login = async (user: string, pass: string) => {
+  const login = async (username: string, password: string) => {
     try {
-      await http.post('/api/auth/login', { username: user, password: pass });
-      setLoading(true);
+      await http.post('/api/auth/login', { username, password });
       await fetchMe();
-    } catch (e:any) {
+    } catch (e: any) {
       notifyError(e?.response?.data?.error || e?.response?.data?.message || 'Login failed');
       throw e;
     }
   };
 
   const logout = async () => {
-    try { await http.post('/api/auth/logout'); } finally {
-      setRole(undefined);
-      setUsername(undefined);
-    }
+    try { await http.post('/api/auth/logout'); } finally { setRole(undefined); }
   };
 
   return (
-    <AuthContext.Provider value={{ role, username, loading, login, logout }}>
+    <AuthContext.Provider value={{ role, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
