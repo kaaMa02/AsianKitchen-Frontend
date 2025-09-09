@@ -2,15 +2,11 @@ import Box from '@mui/material/Box';
 import MuiContainer from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import AKButton from '../../01_atoms/AKButton';
-import { useRestaurantInfoCtx } from '../../../contexts/RestaurantInfoContext';
 
 const NAV_H_XS = 56;
 const NAV_H_MD = 64;
 
 export default function HeroSection() {
-  const { info, isLoading } = useRestaurantInfoCtx();
-  const name = info?.name ?? '';
-
   return (
     <Box
       component="header"
@@ -39,7 +35,7 @@ export default function HeroSection() {
               minHeight: '1.2em',
             }}
           >
-            {isLoading ? ' ' : name}
+            Asian Kitchen
           </Typography>
 
           {/* Primary CTAs */}
@@ -47,13 +43,12 @@ export default function HeroSection() {
             sx={{
               mt: { xs: 4.5, md: 6 },
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, max-content)' },
               gap: 2,
               width: '100%',
             }}
           >
-            <AKButton asLinkHref="/menu?type=delivery">Delivery</AKButton>
-            <AKButton asLinkHref="/menu?type=takeaway">Takeaway</AKButton>
+            <AKButton asLinkHref="/menu">View Menu</AKButton>
             <AKButton asLinkHref="/reservation">Book a Table</AKButton>
           </Box>
         </Box>

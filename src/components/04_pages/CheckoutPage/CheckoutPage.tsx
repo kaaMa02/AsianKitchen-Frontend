@@ -10,10 +10,10 @@ import {
   Button,
   Typography,
   Alert,
-  Divider,
   Paper,
-  TextField,
+  Divider,
 } from "@mui/material";
+import TextField from "@mui/material/TextField";
 
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
@@ -32,12 +32,11 @@ import {
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
 
-/** ----------------------------- Helpers ------------------------------ */
+/* ------------------------ small helpers ------------------------ */
 
-const GOLD = "#D4A017";
-const GOLD_HOVER = "#BD8E12";
-const CARD_BG = "#0F2A26"; // dark panel background used on the payment element wrapper
-const VAT_RATE = 0.026;
+const AK_DARK = "#0B2D24";
+const AK_GOLD = "#D1A01F";
+const CARD_BG = "#F4F7FB";
 
 type Errors = Record<string, string>;
 
@@ -49,24 +48,26 @@ const emptyCustomer: CustomerInfoDTO = {
   address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-function formatChf(n: number) {
-  if (!isFinite(n)) n = 0;
-  return `CHF ${n.toFixed(2)}`;
-}
-
-function computeDeliveryFee(orderType: OrderType, itemsSubtotal: number) {
+// delivery fee rule: > 25 & < 50 => 3; > 50 => 5; else 0
+function calcDeliveryFee(orderType: OrderType, subtotal: number) {
   if (orderType !== "DELIVERY") return 0;
-  if (itemsSubtotal > 25 && itemsSubtotal < 50) return 3;
-  if (itemsSubtotal > 50) return 5;
+  if (subtotal > 50) return 5;
+  if (subtotal > 25 && subtotal < 50) return 3;
   return 0;
 }
 
-/** --------------------------- Payment Step --------------------------- */
+function money(n: number) {
+  return `CHF ${n.toFixed(2)}`;
+}
+
+/* ------------------------ payment step ------------------------ */
 
 function PaymentStep({
   totalToPay,
+  summary,
 }: {
   totalToPay: number;
+  summary: React.ReactNode;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -86,65 +87,55 @@ function PaymentStep({
   };
 
   return (
-    <Box sx={{ maxWidth: 560, mx: "auto", display: "grid", gap: 2 }}>
-      <Box
-        sx={{
-          p: 2,
-          borderRadius: 3,
-          background: CARD_BG,
-        }}
+    <Box
+      sx={{
+        display: "grid",
+        gap: 3,
+        gridTemplateColumns: { md: "1fr 420px" },
+        alignItems: "start",
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{ p: 3, borderRadius: 2, border: "1px solid rgba(11,45,36,.12)" }}
       >
         <PaymentElement />
-      </Box>
+        <Button
+          disabled={!stripe || submitting}
+          variant="contained"
+          onClick={onPay}
+          fullWidth
+          sx={{
+            mt: 2,
+            bgcolor: AK_GOLD,
+            color: AK_DARK,
+            fontWeight: 800,
+            "&:hover": { bgcolor: "#E2B437" },
+          }}
+        >
+          Pay {money(totalToPay)}
+        </Button>
+      </Paper>
 
-      <Button
-        disabled={!stripe || submitting}
-        variant="contained"
-        onClick={onPay}
-        sx={{
-          mt: 1,
-          alignSelf: "center",
-          px: 4,
-          py: 1.25,
-          fontWeight: 700,
-          borderRadius: 999,
-          textTransform: "none",
-          bgcolor: GOLD,
-          "&:hover": { bgcolor: GOLD_HOVER },
-        }}
-      >
-        Pay {formatChf(totalToPay)}
-      </Button>
+      {summary}
     </Box>
   );
 }
 
-/** --------------------------- Main Component ------------------------- */
+/* ------------------------ checkout page ------------------------ */
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { state, total: cartTotal = 0 } = useCart();
+  const { state, total: cartTotalFromCtx } = useCart();
 
-  // normalize cart lines (supports old/new shapes)
-  const cartLines = React.useMemo(() => {
-    const anyState = state as any;
-    return (anyState.lines ?? anyState.items ?? []) as Array<{
-      kind: "MENU" | "BUFFET";
-      id: string;
-      quantity: number;
-      price?: number; // if present, cartTotal already sums these
-    }>;
-  }, [state]);
+  // client preview amounts (server recomputes on PI create)
+  const orderType: OrderType = state.orderType;
+  const itemsSubtotal = Number.isFinite(cartTotalFromCtx) ? (cartTotalFromCtx as number) : 0;
+  const vat = +(itemsSubtotal * 0.026).toFixed(2); // 2.6% VAT
+  const deliveryFee = calcDeliveryFee(orderType, itemsSubtotal);
+  const grand = +(itemsSubtotal + vat + deliveryFee).toFixed(2);
 
-  const orderType: OrderType = (state?.orderType ?? "TAKEAWAY") as OrderType;
-
-  // Client-side amounts (mirror backend logic)
-  const itemsSubtotal = Number(cartTotal ?? 0) || 0;
-  const vat = Number((itemsSubtotal * VAT_RATE).toFixed(2));
-  const deliveryFee = computeDeliveryFee(orderType, itemsSubtotal);
-  const grand = Number((itemsSubtotal + vat + deliveryFee).toFixed(2));
-
-  // local state
+  // form state
   const [clientSecret, setClientSecret] = React.useState<string>();
   const [error, setError] = React.useState<string>();
   const [preparing, setPreparing] = React.useState(false);
@@ -152,17 +143,27 @@ export default function CheckoutPage() {
     React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
 
-  // validation (must match backend expectations)
+  // normalize cart lines
+  const cartLines = React.useMemo(() => {
+    const anyState = state as any;
+    return (anyState.lines ?? anyState.items ?? []) as Array<{
+      kind: "MENU" | "BUFFET";
+      id: string;
+      quantity: number;
+    }>;
+  }, [state]);
+
+  // validation
   const validate = (c: CustomerInfoDTO): Errors => {
     const e: Errors = {};
     const req = (v?: string) => !v || !v.trim();
 
     if (req(c.firstName)) e.firstName = "Required";
     if (req(c.lastName)) e.lastName = "Required";
-    if (req(c.email) || !/.+@.+\..+/.test(c.email)) e.email = "Valid email required";
+    if (req(c.email) || !/.+@.+\..+/.test(c.email))
+      e.email = "Valid email required";
     if (req(c.phone)) e.phone = "Required";
 
-    // Address required for both takeaway/delivery (your backend requires it)
     if (req(c.address.street)) e["address.street"] = "Required";
     if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
     if (req(c.address.plz)) e["address.plz"] = "Required";
@@ -186,25 +187,50 @@ export default function CheckoutPage() {
       setCustomer((prev) => {
         const next = { ...prev, address: { ...prev.address } };
         switch (path) {
-          case "firstName": next.firstName = v; break;
-          case "lastName": next.lastName = v; break;
-          case "email": next.email = v; break;
-          case "phone": next.phone = v; break;
-          case "address.street": next.address.street = v; break;
-          case "address.streetNo": next.address.streetNo = v; break;
-          case "address.plz": next.address.plz = v; break;
-          case "address.city": next.address.city = v; break;
+          case "firstName":
+            next.firstName = v;
+            break;
+          case "lastName":
+            next.lastName = v;
+            break;
+          case "email":
+            next.email = v;
+            break;
+          case "phone":
+            next.phone = v;
+            break;
+          case "address.street":
+            next.address.street = v;
+            break;
+          case "address.streetNo":
+            next.address.streetNo = v;
+            break;
+          case "address.plz":
+            next.address.plz = v;
+            break;
+          case "address.city":
+            next.address.city = v;
+            break;
         }
         return next;
       });
     };
 
+  // client PLZ gate (mirror backend)
+  const allowedPlz = new Set([
+    "4600", "4601", "4609", "4612", "4613", "4622", "4623", "4632",
+  ]);
+  const canDeliver =
+    orderType !== "DELIVERY" ||
+    (customer.address.plz && allowedPlz.has(customer.address.plz.trim()));
+
+  // create order + PI
   const preparePayment = async () => {
     try {
       setError(undefined);
       setFieldErrors({});
 
-      if (!cartLines.length || itemsSubtotal <= 0) {
+      if (!cartLines.length) {
         setError("Your cart is empty.");
         return;
       }
@@ -223,6 +249,11 @@ export default function CheckoutPage() {
         return;
       }
 
+      if (!canDeliver) {
+        setError("We currently don’t deliver to this address.");
+        return;
+      }
+
       setPreparing(true);
       await ensureCsrf();
 
@@ -232,18 +263,24 @@ export default function CheckoutPage() {
           customerInfo: customer,
           orderType,
           specialInstructions: undefined,
-          items: cartLines.map((l) => ({ menuItemId: l.id, quantity: l.quantity })),
+          items: cartLines.map((l) => ({
+            menuItemId: l.id,
+            quantity: l.quantity,
+          })),
         };
         const order = await createCustomerOrder(payload);
         const pi = await createIntentForCustomerOrder(order.id);
         setClientSecret(pi.clientSecret);
-      } else if (hasBuffet) {
+      } else {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
           customerInfo: customer,
           orderType,
           specialInstructions: undefined,
-          items: cartLines.map((l) => ({ buffetItemId: l.id, quantity: l.quantity })),
+          items: cartLines.map((l) => ({
+            buffetItemId: l.id,
+            quantity: l.quantity,
+          })),
         };
         const order = await createBuffetOrder(payload);
         const pi = await createIntentForBuffetOrder(order.id);
@@ -251,111 +288,129 @@ export default function CheckoutPage() {
       }
     } catch (e: any) {
       console.error(e);
-      // zone/validation error from backend (400) -> show message
-      const backendMsg =
-        e?.response?.data?.error ||
-        e?.response?.data?.message ||
-        e?.message;
-      if (backendMsg) setError(backendMsg);
-
       const details = e?.response?.data?.details as Record<string, string> | undefined;
-      if (details) applyBackendErrors(details);
+      if (details) {
+        applyBackendErrors(details);
+        setError("Please correct the highlighted fields.");
+      } else {
+        setError("Failed to prepare checkout. Please try again.");
+      }
     } finally {
       setPreparing(false);
     }
   };
 
-  /** --------------------------- Render --------------------------- */
+  // Order summary (reused on both steps)
+  const OrderSummary = (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: 2,
+        border: "1px solid rgba(11,45,36,.12)",
+        color: AK_DARK,
+        bgcolor: "#FFFFFF",
+        minWidth: 320,
+      }}
+    >
+      <Typography variant="h6" sx={{ fontWeight: 800, color: AK_DARK, mb: 1 }}>
+        Order summary
+      </Typography>
+
+      <Box sx={{ display: "grid", gap: 1.25 }}>
+        <Row label="Subtotal" value={money(itemsSubtotal)} />
+        <Row label="VAT (2.6%)" value={money(vat)} />
+        <Row label="Delivery fee" value={money(deliveryFee)} />
+
+        <Divider sx={{ my: 1 }} />
+
+        <Row label={<strong>Total</strong>} value={<strong>{money(grand)}</strong>} />
+      </Box>
+    </Paper>
+  );
 
   // Step 1: Details
   if (!clientSecret) {
     return (
-      <Box sx={{ p: 3, maxWidth: 1100, mx: "auto" }}>
-        {/* Step pills (read-only) */}
-        <Box sx={{ display: "flex", gap: 1.5, mb: 2 }}>
-          <Button size="small" variant="contained" disableElevation
-            sx={{ pointerEvents: "none", bgcolor: GOLD, "&:hover": { bgcolor: GOLD } }}>
-            1. Details
-          </Button>
-          <Button size="small" variant="outlined" disabled sx={{ pointerEvents: "none", color: "#fff", borderColor: "rgba(255,255,255,0.25)" }}>
-            2. Payment
-          </Button>
-          <Box sx={{ ml: "auto", color: "rgba(255,255,255,0.8)", alignSelf: "center", fontWeight: 600 }}>
-            {orderType === "DELIVERY" ? "Delivery" : "Takeaway"}
-          </Box>
-        </Box>
-
-        <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "1fr 380px" } }}>
-          {/* Details card */}
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: "#fff" }}>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, color: "#122420" }}>
+      <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
+        <Box
+          sx={{
+            display: "grid",
+            gap: 3,
+            gridTemplateColumns: { md: "1fr 420px" },
+          }}
+        >
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: "1px solid rgba(11,45,36,.12)",
+              bgcolor: CARD_BG,
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, color: AK_DARK }}>
               Your details
             </Typography>
 
-            <Box sx={{
-              display: "grid",
-              gap: 2,
-              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }
-            }}>
-              {[
-                { label: "First name", path: "firstName" },
-                { label: "Last name", path: "lastName" },
-                { label: "Email", path: "email", type: "email" },
-                { label: "Phone", path: "phone" },
-                { label: "Street", path: "address.street", full: true },
-                { label: "No.", path: "address.streetNo" },
-                { label: "PLZ", path: "address.plz" },
-                { label: "City", path: "address.city" },
-              ].map((f) => (
-                <TextField
-                  key={f.path}
-                  label={f.label}
-                  type={f.type as any}
-                  fullWidth
-                  value={
-                    f.path === "firstName" ? customer.firstName :
-                    f.path === "lastName" ? customer.lastName :
-                    f.path === "email" ? customer.email :
-                    f.path === "phone" ? customer.phone :
-                    f.path === "address.street" ? customer.address.street :
-                    f.path === "address.streetNo" ? customer.address.streetNo :
-                    f.path === "address.plz" ? customer.address.plz :
-                    customer.address.city
-                  }
-                  onChange={handleInput(f.path)}
-                  error={!!fieldErrors[f.path as keyof Errors]}
-                  helperText={fieldErrors[f.path as keyof Errors]}
-                  sx={{ gridColumn: f.full ? "1 / -1" : "auto" }}
-                  InputLabelProps={{
-                    sx: {
-                      color: "rgba(0,0,0,0.55)",
-                      "&.Mui-focused": { color: "rgba(0,0,0,0.55)" },
-                      fontWeight: 600,
-                    },
-                  }}
-                />
-              ))}
+            <Box
+              sx={{
+                display: "grid",
+                gap: 2,
+                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+              }}
+            >
+              <TextField label="First name" fullWidth value={customer.firstName}
+                onChange={handleInput("firstName")} error={!!fieldErrors.firstName}
+                helperText={fieldErrors.firstName} />
+              <TextField label="Last name" fullWidth value={customer.lastName}
+                onChange={handleInput("lastName")} error={!!fieldErrors.lastName}
+                helperText={fieldErrors.lastName} />
+              <TextField label="Email" type="email" fullWidth value={customer.email}
+                onChange={handleInput("email")} error={!!fieldErrors.email}
+                helperText={fieldErrors.email} />
+              <TextField label="Phone" fullWidth value={customer.phone}
+                onChange={handleInput("phone")} error={!!fieldErrors.phone}
+                helperText={fieldErrors.phone} />
+              <TextField label="Street" fullWidth value={customer.address.street}
+                onChange={handleInput("address.street")} error={!!fieldErrors["address.street"]}
+                helperText={fieldErrors["address.street"]} sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }} />
+              <TextField label="No." fullWidth value={customer.address.streetNo}
+                onChange={handleInput("address.streetNo")} error={!!fieldErrors["address.streetNo"]}
+                helperText={fieldErrors["address.streetNo"]} />
+              <TextField label="PLZ" fullWidth value={customer.address.plz}
+                onChange={handleInput("address.plz")} error={!!fieldErrors["address.plz"]}
+                helperText={fieldErrors["address.plz"]} />
+              <TextField label="City" fullWidth value={customer.address.city}
+                onChange={handleInput("address.city")} error={!!fieldErrors["address.city"]}
+                helperText={fieldErrors["address.city"]} />
             </Box>
 
-            {error && (
-              <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+            {orderType === "DELIVERY" && !canDeliver && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                We currently don’t deliver to this address.
+              </Alert>
             )}
 
-            <Box sx={{ mt: 2, display: "flex", gap: 1.5 }}>
-              <Button variant="outlined" onClick={() => navigate("/menu")} sx={{ borderRadius: 999, textTransform: "none" }}>
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {error}
+              </Alert>
+            )}
+
+            <Box sx={{ mt: 2, display: "flex", gap: 1 }}>
+              <Button variant="outlined" onClick={() => navigate("/menu")}>
                 Back to Menu
               </Button>
               <Button
                 variant="contained"
                 onClick={preparePayment}
-                disabled={preparing}
+                disabled={preparing || (orderType === "DELIVERY" && !canDeliver)}
                 sx={{
-                  borderRadius: 999,
-                  textTransform: "none",
-                  px: 3,
-                  bgcolor: GOLD,
-                  "&:hover": { bgcolor: GOLD_HOVER },
-                  fontWeight: 700,
+                  bgcolor: AK_GOLD,
+                  color: AK_DARK,
+                  fontWeight: 800,
+                  "&:hover": { bgcolor: "#E2B437" },
                 }}
               >
                 {preparing ? "Preparing…" : "Continue to payment"}
@@ -363,19 +418,7 @@ export default function CheckoutPage() {
             </Box>
           </Paper>
 
-          {/* Order summary (mirrors backend math) */}
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 800, color: "#fff" }}>
-              Order summary
-            </Typography>
-            <Box sx={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, display: "grid", gap: 1.25 }}>
-              <Row label="Subtotal" value={formatChf(itemsSubtotal)} />
-              <Row label="VAT (2.6%)" value={formatChf(vat)} />
-              <Row label="Delivery fee" value={formatChf(deliveryFee)} />
-              <Divider sx={{ my: 1 }} />
-              <Row label="Total" value={formatChf(grand)} emphasize />
-            </Box>
-          </Paper>
+          {OrderSummary}
         </Box>
       </Box>
     );
@@ -383,48 +426,31 @@ export default function CheckoutPage() {
 
   // Step 2: Payment
   return (
-    <Box sx={{ p: 3, maxWidth: 1100, mx: "auto" }}>
-      <Box sx={{ display: "flex", gap: 1.5, mb: 2 }}>
-        <Button size="small" variant="outlined" disabled sx={{ pointerEvents: "none", color: "#fff", borderColor: "rgba(255,255,255,0.25)" }}>
-          1. Details
-        </Button>
-        <Button size="small" variant="contained" disableElevation
-          sx={{ pointerEvents: "none", bgcolor: GOLD, "&:hover": { bgcolor: GOLD } }}>
-          2. Payment
-        </Button>
-        <Box sx={{ ml: "auto", color: "rgba(255,255,255,0.8)", alignSelf: "center", fontWeight: 600 }}>
-          {orderType === "DELIVERY" ? "Delivery" : "Takeaway"}
-        </Box>
-      </Box>
-
-      <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "1fr 380px" } }}>
-        <Elements stripe={stripePromise} options={{ clientSecret }}>
-          <PaymentStep totalToPay={grand} />
-        </Elements>
-
-        <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 800, color: "#fff" }}>
-            Order summary
-          </Typography>
-          <Box sx={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, display: "grid", gap: 1.25 }}>
-            <Row label="Subtotal" value={formatChf(itemsSubtotal)} />
-            <Row label="VAT (2.6%)" value={formatChf(vat)} />
-            <Row label="Delivery fee" value={formatChf(deliveryFee)} />
-            <Divider sx={{ my: 1 }} />
-            <Row label="Total" value={formatChf(grand)} emphasize />
-          </Box>
-        </Paper>
-      </Box>
+    <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
+      <Elements stripe={stripePromise} options={{ clientSecret }}>
+        <PaymentStep totalToPay={grand} summary={OrderSummary} />
+      </Elements>
     </Box>
   );
 }
 
-/** Simple two-column row for the summary */
-function Row({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+/* ------------------------ tiny UI helper ------------------------ */
+
+function Row({
+  label,
+  value,
+}: {
+  label: React.ReactNode;
+  value: React.ReactNode;
+}) {
   return (
-    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-      <span style={{ opacity: 0.9 }}>{label}</span>
-      <span style={{ fontWeight: emphasize ? 800 : 700 }}>{value}</span>
+    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+      <Typography component="span" sx={{ color: "#0B2D24" }}>
+        {label}
+      </Typography>
+      <Typography component="span" sx={{ color: "#0B2D24" }}>
+        {value}
+      </Typography>
     </Box>
   );
 }

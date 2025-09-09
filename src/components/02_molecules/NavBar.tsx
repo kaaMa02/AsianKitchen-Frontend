@@ -26,12 +26,12 @@ export default function Navbar() {
           }}
         >
           <Box component="nav" aria-label="Primary" sx={{ display: 'flex', gap: { xs: 3, md: 6 } }}>
-            {/* absolute hashes so they work from anywhere */}
+            <Link component={RouterLink} underline="none" to="/" sx={linkSx}>Home</Link>
             <Link component={RouterLink} underline="none" to="/#about" sx={linkSx}>About Us</Link>
             <Link component={RouterLink} underline="none" to="/#location" sx={linkSx}>Location</Link>
             <Link component={RouterLink} underline="none" to="/#contact" sx={linkSx}>Contact</Link>
-            {/* go straight to menu */}
             <Link component={RouterLink} underline="none" to="/menu" sx={linkSx}>Menu</Link>
+            <Link component={RouterLink} underline="none" to="/reservation" sx={linkSx}>Reservation</Link>
           </Box>
         </Toolbar>
       </MuiContainer>

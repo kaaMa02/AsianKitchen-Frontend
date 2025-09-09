@@ -45,8 +45,12 @@ export default function MenuPage() {
 
   const { addOrInc, state, setOrderType, count, total } = useCart();
 
-  // Initialize from query string using the enum
+  // One-time init from query string. After that, user can switch freely.
+  const initedRef = React.useRef(false);
   React.useEffect(() => {
+    if (initedRef.current) return;
+    initedRef.current = true;
+
     const t = (searchParams.get('type') || '').toLowerCase();
     if (t === 'delivery') setOrderType(OrderType.DELIVERY);
     if (t === 'takeaway') setOrderType(OrderType.TAKEAWAY);
@@ -54,7 +58,8 @@ export default function MenuPage() {
     const qTab = (searchParams.get('tab') || '').toLowerCase();
     if (qTab === 'buffet') setTab(1);
     if (qTab === 'menu' || qTab === 'a-la-carte') setTab(0);
-  }, [searchParams, setOrderType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
 
   // Load data
   React.useEffect(() => {
