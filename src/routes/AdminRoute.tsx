@@ -1,20 +1,24 @@
-// src/components/common/AdminRoute.tsx
-import * as React from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+// src/components/routes/AdminRoute.tsx
+import { Navigate, useLocation } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 
-export default function AdminRoute() {
-  const { role } = useAuth();
+export default function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { loading, role } = useAuth();
   const loc = useLocation();
 
-  // treat any role that includes 'ADMIN' as admin
-  const isAdmin = !!role && role.toUpperCase().includes('ADMIN');
+  if (loading) {
+    return (
+      <Box sx={{ minHeight: '40vh', display: 'grid', placeItems: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-  if (!isAdmin) {
-    const next = encodeURIComponent(loc.pathname + loc.search + loc.hash);
+  if (role !== 'ROLE_ADMIN') {
+    const next = encodeURIComponent(loc.pathname + loc.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  // render nested /admin/* routes
-  return <Outlet />;
+  return <>{children}</>;
 }

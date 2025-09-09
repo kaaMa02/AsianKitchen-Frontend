@@ -1,61 +1,69 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useEffect, useState, useContext } from 'react';
-import http, { ensureCsrf } from '../services/http';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import http from '../services/http';
 
-type Role = 'ROLE_ADMIN' | 'ROLE_CUSTOMER' | undefined;
+export type Role = 'ROLE_ADMIN' | 'ROLE_CUSTOMER' | undefined;
 
 type AuthContextType = {
+  loading: boolean;        // <— important to avoid redirect before /me finishes
   role?: Role;
   username?: string;
-  login: (u: string, p: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshMe: () => Promise<void>;
 };
 
-export const AuthContext = createContext<AuthContextType>({
+const AuthContext = createContext<AuthContextType>({
+  loading: true,
   login: async () => {},
   logout: async () => {},
+  refreshMe: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role>();
-  const [username, setUsername] = useState<string>();
+  const [username, setUsername] = useState<string | undefined>();
 
-  const fetchMe = async () => {
+  const refreshMe = async () => {
     try {
-      const { data } = await http.get('/api/auth/me'); // expects { username, role }
+      const { data } = await http.get('/api/auth/me'); // { username, role }
+      setUsername(data?.username);
       setRole(data?.role as Role);
-      setUsername(data?.username as string);
     } catch {
-      setRole(undefined);
       setUsername(undefined);
+      setRole(undefined);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMe();
-    const onLogout = () => { setRole(undefined); setUsername(undefined); };
+    refreshMe();
+    const onLogout = () => {
+      setUsername(undefined);
+      setRole(undefined);
+    };
     window.addEventListener('auth:logout', onLogout);
     return () => window.removeEventListener('auth:logout', onLogout);
   }, []);
 
-  const login = async (username: string, password: string) => {
-    // (after step #1 this is not required, but harmless and useful if you re-enable CSRF later)
-    await ensureCsrf();
-    await http.post('/api/auth/login', { username, password }); // Set-Cookie happens here
-    await fetchMe(); // must succeed if cookie was stored
+  const login = async (u: string, p: string) => {
+    await http.post('/api/auth/login', { username: u, password: p }, { withCredentials: true });
+    await refreshMe();
   };
 
   const logout = async () => {
     try { await http.post('/api/auth/logout'); } finally {
-      setRole(undefined);
       setUsername(undefined);
+      setRole(undefined);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ role, username, login, logout }}>
+    <AuthContext.Provider value={{ loading, role, username, login, logout, refreshMe }}>
       {children}
     </AuthContext.Provider>
   );
