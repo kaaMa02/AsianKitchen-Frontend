@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Box, Paper, TextField, Typography, Button, Alert } from '@mui/material';
-import { useAuth } from '../../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AK_DARK = '#0B2D24';
 const AK_GOLD = '#D1A01F';
