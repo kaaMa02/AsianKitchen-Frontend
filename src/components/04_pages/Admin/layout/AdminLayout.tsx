@@ -5,8 +5,7 @@ import {
   ListItemText, Box, Button
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import { useContext } from 'react';
-import { AuthContext } from '../../../../contexts/AuthContext';
+import { useAuth } from '../../../../contexts/AuthContext';
 
 const AK_DARK = '#0B2D24';
 const AK_GOLD = '#D1A01F';
@@ -23,7 +22,7 @@ const NAV = [
 
 export default function AdminLayout() {
   const [open, setOpen] = React.useState(false);
-  const { logout, username } = useContext(AuthContext);
+  const { logout, username } = useAuth();
   const loc = useLocation();
 
   const drawer = (

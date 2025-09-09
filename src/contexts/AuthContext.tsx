@@ -1,70 +1,75 @@
-// src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  FC,
+} from 'react';
 import http from '../services/http';
+import { notifyError } from '../services/toast';
+import { Role } from '../types/api-types';
 
-export type Role = 'ROLE_ADMIN' | 'ROLE_CUSTOMER' | undefined;
-
-type AuthContextType = {
-  loading: boolean;        // <— important to avoid redirect before /me finishes
+export interface AuthContextType {
   role?: Role;
   username?: string;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  refreshMe: () => Promise<void>;
-};
+}
 
 const AuthContext = createContext<AuthContextType>({
-  loading: true,
   login: async () => {},
   logout: async () => {},
-  refreshMe: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<Role>();
-  const [username, setUsername] = useState<string | undefined>();
+interface AuthProviderProps { children: ReactNode; }
 
-  const refreshMe = async () => {
+export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
+  const [role, setRole] = useState<Role>();
+  const [username, setUsername] = useState<string>();
+
+  const fetchMe = async () => {
     try {
-      const { data } = await http.get('/api/auth/me'); // { username, role }
-      setUsername(data?.username);
-      setRole(data?.role as Role);
+      const { data } = await http.get('/api/auth/me', { withCredentials: true });
+      setRole(data?.role as Role | undefined);
+      setUsername(data?.username as string | undefined);
     } catch {
-      setUsername(undefined);
       setRole(undefined);
-    } finally {
-      setLoading(false);
+      setUsername(undefined);
     }
   };
 
   useEffect(() => {
-    refreshMe();
-    const onLogout = () => {
-      setUsername(undefined);
-      setRole(undefined);
-    };
+    fetchMe();
+    const onLogout = () => { setRole(undefined); setUsername(undefined); };
     window.addEventListener('auth:logout', onLogout);
     return () => window.removeEventListener('auth:logout', onLogout);
   }, []);
 
   const login = async (u: string, p: string) => {
-    await http.post('/api/auth/login', { username: u, password: p }, { withCredentials: true });
-    await refreshMe();
-  };
-
-  const logout = async () => {
-    try { await http.post('/api/auth/logout'); } finally {
-      setUsername(undefined);
-      setRole(undefined);
+    try {
+      await http.post('/api/auth/login', { username: u, password: p }, { withCredentials: true });
+      await fetchMe();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || 'Login failed');
+      throw e;
     }
   };
 
+  const logout = async () => {
+    try { await http.post('/api/auth/logout', undefined, { withCredentials: true }); }
+    finally { setRole(undefined); setUsername(undefined); }
+  };
+
   return (
-    <AuthContext.Provider value={{ loading, role, username, login, logout, refreshMe }}>
+    <AuthContext.Provider value={{ role, username, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
+
+// ✅ Back-compat export so old imports don’t crash builds.
+// (We still prefer using the useAuth() hook everywhere.)
+export { AuthContext };
