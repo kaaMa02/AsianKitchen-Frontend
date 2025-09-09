@@ -1,8 +1,9 @@
-import http from './http';
+import http, { ensureCsrf } from './http';
 import { BuffetOrderReadDTO, BuffetOrderWriteDTO, OrderStatus } from '../types/api-types';
 
-// public
+// Public
 export async function createBuffetOrder(dto: BuffetOrderWriteDTO): Promise<BuffetOrderReadDTO> {
+  await ensureCsrf();
   const { data } = await http.post<BuffetOrderReadDTO>('/api/buffet-orders', dto);
   return data;
 }

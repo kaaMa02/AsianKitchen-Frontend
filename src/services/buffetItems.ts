@@ -23,3 +23,7 @@ export async function listAvailableBuffetItems(): Promise<BuffetItemReadDTO[]> {
   const { data } = await http.get<BuffetItemReadDTO[]>('/api/buffet-items');
   return data;
 }
+
+export async function listBuffetItems(): Promise<BuffetItemReadDTO[]> {
+  const { data } = await http.get('/api/admin/buffet-items'); return data;
+}

@@ -1,7 +1,6 @@
 import http, { ensureCsrf } from './http';
 import { CustomerOrderReadDTO, CustomerOrderWriteDTO, OrderStatus } from '../types/api-types';
 
-// Menu orders (public)
 export async function createCustomerOrder(dto: CustomerOrderWriteDTO): Promise<CustomerOrderReadDTO> {
   await ensureCsrf();
   const { data } = await http.post<CustomerOrderReadDTO>('/api/orders', dto);
@@ -20,7 +19,7 @@ export async function trackCustomerOrder(orderId: string, email: string): Promis
   return data;
 }
 
-// Admin for menu orders
+// Admin
 export async function listAllCustomerOrders(): Promise<CustomerOrderReadDTO[]> {
   const { data } = await http.get<CustomerOrderReadDTO[]>('/api/admin/orders');
   return data;
