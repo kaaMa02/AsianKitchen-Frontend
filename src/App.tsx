@@ -1,17 +1,14 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { Box, CssBaseline } from "@mui/material";
+import { Box } from "@mui/material";
 
 import Navbar from "./components/02_molecules/NavBar";
 import Footer from "./components/03_organisms/Home/Footer";
 
-import { RestaurantInfoProvider } from "./contexts/RestaurantInfoContext";
-import { CartProvider } from "./contexts/CartContext";
-
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import PageLoader from "./components/common/PageLoader";
-import { ToastProvider } from "./services/toast";
 import ScrollToHash from "./components/common/ScrollToHash";
+
 import CheckoutPage from "./components/04_pages/CheckoutPage/CheckoutPage";
 import ReservationPage from "./components/04_pages/ReservationPage/ReservationPage";
 import BuffetItemsAdminPage from "./components/04_pages/Admin/BuffetItemsAdminPage";
@@ -27,64 +24,53 @@ import AdminRoute from "./routes/AdminRoute";
 import AdminDashboardPage from "./components/04_pages/Admin/AdminDashboardPage";
 import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage";
 
-// Admin
-
-
-// Auth
-
 // lazy public
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
 
 export default function App() {
   return (
-    <ToastProvider>
-      <RestaurantInfoProvider>
-        <CartProvider>
-          <CssBaseline />
-          <ErrorBoundary fallback={<PageLoader />}>
-            <Navbar />
-            <Box sx={{ height: { xs: 56, md: 64 } }} />
+    <ErrorBoundary fallback={<PageLoader />}>
+      <Navbar />
+      {/* spacer for fixed navbar */}
+      <Box sx={{ height: { xs: 56, md: 64 } }} />
 
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                {/* Public */}
-                <Route path="/" element={<HomePage />} />
-                <Route path="/menu" element={<MenuPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/reservation" element={<ReservationPage />} />
-                <Route path="/login" element={<LoginPage />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Public */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/menu" element={<MenuPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/reservation" element={<ReservationPage />} />
+          <Route path="/login" element={<LoginPage />} />
 
-                {/* Admin (guarded) */}
-                <Route
-                  path="/admin"
-                  element={
-                    <AdminRoute>
-                      <AdminLayout />
-                    </AdminRoute>
-                  }
-                >
-                  <Route index element={<AdminDashboardPage />} />
-                  <Route path="reservations" element={<ReservationsAdminPage />} />
-                  <Route path="orders" element={<OrdersAdminPage />} />
-                  <Route path="buffet-orders" element={<BuffetOrdersAdminPage />} />
-                  <Route path="food-items" element={<FoodItemsAdminPage />} />
-                  <Route path="menu-items" element={<MenuItemsAdminPage />} />
-                  <Route path="buffet-items" element={<BuffetItemsAdminPage />} />
-                  <Route path="restaurant-info" element={<RestaurantInfoAdminPage />} />
-                  <Route path="users" element={<UsersAdminPage />} />
-                </Route>
+          {/* Admin (guarded) */}
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminLayout />
+              </AdminRoute>
+            }
+          >
+            <Route index element={<AdminDashboardPage />} />
+            <Route path="reservations" element={<ReservationsAdminPage />} />
+            <Route path="orders" element={<OrdersAdminPage />} />
+            <Route path="buffet-orders" element={<BuffetOrdersAdminPage />} />
+            <Route path="food-items" element={<FoodItemsAdminPage />} />
+            <Route path="menu-items" element={<MenuItemsAdminPage />} />
+            <Route path="buffet-items" element={<BuffetItemsAdminPage />} />
+            <Route path="restaurant-info" element={<RestaurantInfoAdminPage />} />
+            <Route path="users" element={<UsersAdminPage />} />
+          </Route>
 
-                {/* Fallback */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
 
-            <ScrollToHash />
-            <Footer />
-          </ErrorBoundary>
-        </CartProvider>
-      </RestaurantInfoProvider>
-    </ToastProvider>
+      <ScrollToHash />
+      <Footer />
+    </ErrorBoundary>
   );
 }

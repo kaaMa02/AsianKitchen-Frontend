@@ -1,4 +1,3 @@
-// src/components/common/PageLoader.tsx
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 export default function PageLoader(){
