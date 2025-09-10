@@ -1,40 +1,35 @@
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { ThemeProvider, CssBaseline } from "@mui/material";
-import { theme } from "./styles/theme";
-
+import { CssBaseline } from "@mui/material";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
 import App from "./App";
-
 import { AuthProvider } from "./contexts/AuthContext";
 import { RestaurantInfoProvider } from "./contexts/RestaurantInfoContext";
 import { CartProvider } from "./contexts/CartContext";
 import { ToastProvider } from "./services/toast";
+import { ensureCsrf } from "./services/http";
 
-import { ensureCsrf } from "./services/http"; // <-- from the http.ts you updated
+// Kick off CSRF cookie (fire-and-forget)
+ensureCsrf().catch(() => { /* ignore; first write will retry */ });
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+const theme = createTheme();
 
-(async () => {
-  try {
-    await ensureCsrf();
-  } catch {
-    // ignore; interceptor will retry on first mutating request
-  }
-
-  root.render(
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter>
-        <AuthProvider>
-          <RestaurantInfoProvider>
-            <CartProvider>
-              <ToastProvider>
-                <App />
-              </ToastProvider>
-            </CartProvider>
-          </RestaurantInfoProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </ThemeProvider>
-  );
-})();
+const root = ReactDOM.createRoot(
+  document.getElementById("root") as HTMLElement
+);
+root.render(
+  <ThemeProvider theme={theme}>
+    <CssBaseline />
+    <BrowserRouter>
+      <AuthProvider>
+        <RestaurantInfoProvider>
+          <CartProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </CartProvider>
+        </RestaurantInfoProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  </ThemeProvider>
+);
