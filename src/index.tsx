@@ -9,14 +9,12 @@ import { CartProvider } from "./contexts/CartContext";
 import { ToastProvider } from "./services/toast";
 import { ensureCsrf } from "./services/http";
 
-// Kick off CSRF cookie (fire-and-forget)
-ensureCsrf().catch(() => { /* ignore; first write will retry */ });
+// Prime CSRF cookie once on boot (non-blocking)
+ensureCsrf().catch(() => {});
 
 const theme = createTheme();
 
-const root = ReactDOM.createRoot(
-  document.getElementById("root") as HTMLElement
-);
+const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 root.render(
   <ThemeProvider theme={theme}>
     <CssBaseline />

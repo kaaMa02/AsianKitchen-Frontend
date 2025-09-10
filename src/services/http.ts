@@ -1,102 +1,87 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-/**
- * Base URL:
- * - In prod, defaults to Render API subdomain
- * - Locally, http://localhost:8080
- */
+/** -------- Base URL -------- */
 const API_URL =
   (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "") ||
   (process.env.NODE_ENV === "production"
     ? "https://api.asian-kitchen.online"
     : "http://localhost:8080");
 
-/**
- * Single axios instance used everywhere.
- * withCredentials=true so cookies (AK_AUTH, XSRF-TOKEN) are sent.
- */
+/** -------- Axios instance -------- */
 const http = axios.create({
   baseURL: API_URL,
-  withCredentials: true,
-  xsrfCookieName: "XSRF-TOKEN", // for completeness (axios won't auto-add cross-site)
+  withCredentials: true,      // send AK_AUTH + XSRF-TOKEN cookies
+  xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
   timeout: 12000,
 } as any);
 
-/** Small cookie reader (works cross-subdomain when cookie domain is .asian-kitchen.online) */
+/** -------- Cookie utils -------- */
 function readCookie(name: string) {
   return decodeURIComponent(
     document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))?.[1] || ""
   );
 }
 
-/**
- * Ensure the CSRF cookie is present and set a default header for convenience.
- * We keep the name `ensureCsrf` because other files already import it.
- */
+/** We tag our own CSRF bootstrap request to avoid recursion in interceptors */
+type Cfg = InternalAxiosRequestConfig & { __skipCsrf?: boolean; _csrfRetry?: boolean };
+
+/** -------- CSRF bootstrap -------- */
 let csrfInitInFlight: Promise<void> | null = null;
 
 export async function ensureCsrf(force = false): Promise<void> {
   const current = readCookie("XSRF-TOKEN");
-
   if (current && !force) {
-    // keep a default header up-to-date
     (http.defaults.headers as any).common["X-XSRF-TOKEN"] = current;
     return;
   }
 
   if (!csrfInitInFlight) {
     csrfInitInFlight = http
-      .get("/api/csrf", { withCredentials: true })
+      .get("/api/csrf", {
+        withCredentials: true,
+        // sentinel to skip the interceptor logic
+        headers: { "X-REQUEST-CSRF-BOOT": "1" },
+        __skipCsrf: true as any,
+      } as any)
       .then(() => {
         const token = readCookie("XSRF-TOKEN");
-        if (token) {
-          (http.defaults.headers as any).common["X-XSRF-TOKEN"] = token;
-        }
+        if (token) (http.defaults.headers as any).common["X-XSRF-TOKEN"] = token;
       })
-      .finally(() => {
-        csrfInitInFlight = null;
-      });
+      .finally(() => (csrfInitInFlight = null));
   }
 
   await csrfInitInFlight;
 }
 
-/** Optional alias if you ever used a different name elsewhere */
 export const bootstrapCsrf = ensureCsrf;
 
+/** -------- Interceptors -------- */
+
 /**
- * Request interceptor:
- * For write methods, ensure we have a fresh CSRF cookie and inject the header.
+ * ALWAYS attach X-XSRF-TOKEN (after ensuring cookie exists).
+ * We skip only the /api/csrf bootstrap request itself.
  */
 http.interceptors.request.use(
-  async (config: InternalAxiosRequestConfig) => {
-    const m = (config.method || "get").toLowerCase();
-    const isWrite = !["get", "head", "options"].includes(m);
-
-    if (isWrite) {
+  async (config: Cfg) => {
+    if (!config.__skipCsrf) {
       await ensureCsrf(); // make sure cookie exists
       const token = readCookie("XSRF-TOKEN");
       if (token) (config.headers as any)["X-XSRF-TOKEN"] = token;
     }
-
     return config;
   },
   (err) => Promise.reject(err)
 );
 
 /**
- * Response interceptor:
- * If the server rotated/invalidated the CSRF token and we get a 403,
- * refresh the token once and retry the request automatically.
+ * If server says 403 (token rotated/invalid), refresh CSRF cookie once and retry.
  */
 http.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const status = error.response?.status;
-    const cfg = error.config as (InternalAxiosRequestConfig & {
-      _csrfRetry?: boolean;
-    });
+    const cfg = error.config as Cfg;
 
     if (status === 403 && cfg && !cfg._csrfRetry) {
       cfg._csrfRetry = true;
