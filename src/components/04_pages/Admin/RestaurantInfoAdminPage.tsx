@@ -13,6 +13,8 @@ import {
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
 
+type InputEvt = React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
+
 export default function RestaurantInfoAdminPage() {
   const [id, setId] = React.useState<string | undefined>(undefined);
   const [form, setForm] = React.useState<RestaurantInfoWriteDTO>({
@@ -82,48 +84,56 @@ export default function RestaurantInfoAdminPage() {
         <TextField
           label="Name"
           value={form.name}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          onChange={(e: InputEvt) =>
+            setForm((f) => ({ ...f, name: e.target.value }))
+          }
         />
+
         <TextField
           label="Phone"
           value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+          onChange={(e: InputEvt) =>
+            setForm((f) => ({ ...f, phone: e.target.value }))
+          }
         />
 
         <TextField
           label="Street"
           value={form.address.street}
-          onChange={(e) =>
+          onChange={(e: InputEvt) =>
             setForm((f) => ({
               ...f,
               address: { ...f.address, street: e.target.value },
             }))
           }
         />
+
         <TextField
           label="No."
           value={form.address.streetNo}
-          onChange={(e) =>
+          onChange={(e: InputEvt) =>
             setForm((f) => ({
               ...f,
               address: { ...f.address, streetNo: e.target.value },
             }))
           }
         />
+
         <TextField
           label="PLZ"
           value={form.address.plz}
-          onChange={(e) =>
+          onChange={(e: InputEvt) =>
             setForm((f) => ({
               ...f,
               address: { ...f.address, plz: e.target.value },
             }))
           }
         />
+
         <TextField
           label="City"
           value={form.address.city}
-          onChange={(e) =>
+          onChange={(e: InputEvt) =>
             setForm((f) => ({
               ...f,
               address: { ...f.address, city: e.target.value },
@@ -134,22 +144,21 @@ export default function RestaurantInfoAdminPage() {
         <TextField
           label="Opening hours (multiline)"
           value={form.openingHours}
-          onChange={(e) =>
+          onChange={(e: InputEvt) =>
             setForm((f) => ({ ...f, openingHours: e.target.value }))
           }
           multiline
           minRows={4}
-          sx={{ gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
         />
+
         <TextField
           label="Delivery note (optional)"
           value={form.deliveryNote || ""}
-          onChange={(e) =>
+          onChange={(e: InputEvt) =>
             setForm((f) => ({ ...f, deliveryNote: e.target.value }))
           }
           multiline
           minRows={2}
-          sx={{ gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
         />
       </Box>
 

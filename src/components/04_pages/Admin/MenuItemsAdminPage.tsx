@@ -34,6 +34,7 @@ import {
   MenuItemCategory,
 } from "../../../types/api-types";
 import { notifyError, notifySuccess } from "../../../services/toast";
+import type { SelectChangeEvent } from "@mui/material/Select";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -221,7 +222,7 @@ export default function MenuItemsAdminPage() {
             <Select
               labelId="food-label"
               value={form.foodItemId}
-              onChange={(e) =>
+              onChange={(e: SelectChangeEvent<string>) =>
                 setForm((f) => ({ ...f, foodItemId: String(e.target.value) }))
               }
               fullWidth
@@ -239,7 +240,7 @@ export default function MenuItemsAdminPage() {
             <Select
               labelId="cat-label"
               value={form.category}
-              onChange={(e) =>
+              onChange={(e: SelectChangeEvent<MenuItemCategory>) =>
                 setForm((f) => ({
                   ...f,
                   category: e.target.value as MenuItemCategory,
@@ -259,13 +260,15 @@ export default function MenuItemsAdminPage() {
             label="Price (CHF)"
             type="number"
             value={form.price}
-            onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm((f) => ({ ...f, price: e.target.value }))
+            }
           />
           <FormControlLabel
             control={
               <Checkbox
                 checked={!!form.available}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setForm((f) => ({ ...f, available: e.target.checked }))
                 }
               />

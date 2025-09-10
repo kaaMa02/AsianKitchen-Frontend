@@ -31,6 +31,7 @@ import {
   AdminUserUpdateDTO,
 } from "../../../types/api-types";
 import { notifyError, notifySuccess } from "../../../services/toast";
+import type { SelectChangeEvent } from "@mui/material/Select";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -203,31 +204,37 @@ export default function UsersAdminPage() {
           <TextField
             label="Username"
             value={form.username}
-            onChange={(e) =>
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               setForm((f) => ({ ...f, username: e.target.value }))
             }
           />
+
           <TextField
             label="Email"
             value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm((f) => ({ ...f, email: e.target.value }))
+            }
           />
+
           {!form.id && (
             <TextField
               label="Password"
               type="password"
               value={form.password || ""}
-              onChange={(e) =>
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setForm((f) => ({ ...f, password: e.target.value }))
               }
             />
           )}
+
           <Box>
             <InputLabel id="role-label">Role</InputLabel>
+
             <Select
               labelId="role-label"
               value={form.role}
-              onChange={(e) =>
+              onChange={(e: SelectChangeEvent<Role>) =>
                 setForm((f) => ({ ...f, role: e.target.value as Role }))
               }
               fullWidth
