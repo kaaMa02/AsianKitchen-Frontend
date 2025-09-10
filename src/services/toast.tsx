@@ -1,29 +1,92 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import * as React from 'react';
+import { Snackbar, Alert } from '@mui/material';
 
-type ToastCtx = { notifyError: (m: string) => void; notifyOk: (m: string) => void; };
-const Ctx = createContext<ToastCtx>({ notifyError: () => {}, notifyOk: () => {} });
-let extNotifyError = (_: string) => {}; // for non-React files
-let extNotifyOk = (_: string) => {};
+type Severity = 'success' | 'error' | 'info' | 'warning';
+type ToastIn = { text: string; severity?: Severity; durationMs?: number };
+type Toast = ToastIn & { id: number; severity: Severity; durationMs: number };
 
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [sev, setSev] = useState<'success' | 'error'>('success');
-  const notify = (s: 'success'|'error', m: string) => { setSev(s); setMsg(m); setOpen(true); };
-  const api = { notifyError: (m:string)=>notify('error',m), notifyOk:(m:string)=>notify('success',m) };
-  extNotifyError = api.notifyError; extNotifyOk = api.notifyOk;
+let enqueueExternal: ((t: ToastIn) => void) | null = null;
+const pending: ToastIn[] = [];
+
+// Public helpers (use these anywhere)
+export function notify(text: string, severity: Severity = 'info', durationMs = 3000) {
+  if (enqueueExternal) enqueueExternal({ text, severity, durationMs });
+  else pending.push({ text, severity, durationMs });
+}
+export function notifySuccess(text: string, durationMs = 2500) {
+  notify(text, 'success', durationMs);
+}
+export function notifyError(text: string, durationMs = 4000) {
+  notify(text, 'error', durationMs);
+}
+export function notifyInfo(text: string, durationMs = 3000) {
+  notify(text, 'info', durationMs);
+}
+export function notifyWarning(text: string, durationMs = 3000) {
+  notify(text, 'warning', durationMs);
+}
+
+// Provider (wrap your app with this)
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [queue, setQueue] = React.useState<Toast[]>([]);
+  const [current, setCurrent] = React.useState<Toast | null>(null);
+  const [open, setOpen] = React.useState(false);
+
+  // Install global enqueue and flush any pending toasts created before mount
+  React.useEffect(() => {
+    enqueueExternal = (t: ToastIn) =>
+      setQueue(q => [
+        ...q,
+        {
+          id: Date.now() + Math.random(),
+          text: t.text,
+          severity: t.severity ?? 'info',
+          durationMs: t.durationMs ?? 3000,
+        },
+      ]);
+
+    if (pending.length) {
+      const p = pending.splice(0, pending.length);
+      p.forEach(t => enqueueExternal!(t));
+    }
+    return () => {
+      enqueueExternal = null;
+    };
+  }, []);
+
+  // Show next toast when ready
+  React.useEffect(() => {
+    if (!current && queue.length) {
+      setCurrent(queue[0]);
+      setQueue(q => q.slice(1));
+      setOpen(true);
+    }
+  }, [queue, current]);
+
+  const handleClose = (_?: unknown, reason?: string) => {
+    if (reason === 'clickaway') return;
+    setOpen(false);
+    setCurrent(null);
+  };
 
   return (
-    <Ctx.Provider value={api}>
+    <>
       {children}
-      <Snackbar open={open} autoHideDuration={3500} onClose={()=>setOpen(false)} anchorOrigin={{vertical:'bottom',horizontal:'center'}}>
-        <Alert severity={sev} variant="filled" sx={{ width: '100%' }}>{msg}</Alert>
+      <Snackbar
+        open={open}
+        autoHideDuration={current?.durationMs ?? 3000}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleClose}
+          severity={current?.severity ?? 'info'}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {current?.text}
+        </Alert>
       </Snackbar>
-    </Ctx.Provider>
+    </>
   );
 }
-export function useToast(){ return useContext(Ctx); }
-export const notifyError = (m:string)=>extNotifyError(m);
-export const notifyOk = (m:string)=>extNotifyOk(m);

@@ -1,79 +1,204 @@
-import * as React from 'react';
+import * as React from "react";
 import {
-  Box, Paper, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, FormControlLabel, Switch, MenuItem as MItem, Select, InputLabel, FormControl
-} from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import { MenuItemDTO, MenuItemWriteDTO, MenuItemCategory } from '../../../types/api-types';
-import { listAllMenuItems, createMenuItem, updateMenuItem, deleteMenuItem } from '../../../services/menuItems';
+  Paper,
+  Typography,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControlLabel,
+  Checkbox,
+  MenuItem,
+  Select,
+  InputLabel,
+  Box,
+} from "@mui/material";
+import {
+  listAllMenuItems,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+} from "../../../services/menuItems";
+import { listFoodItems } from "../../../services/foodItems";
+import {
+  MenuItemDTO,
+  MenuItemWriteDTO,
+  FoodItemDTO,
+  MenuItemCategory,
+} from "../../../types/api-types";
+import { notifyError, notifySuccess } from "../../../services/toast";
 
-const card = { p: 3, borderRadius: 2, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' } as const;
-const categories = Object.values(MenuItemCategory);
+const AK_DARK = "#0B2D24";
+const AK_GOLD = "#D1A01F";
+
+type EditState = {
+  id?: string;
+  foodItemId: string;
+  price: string; // BigDecimal string in DTO
+  available: boolean;
+  category: MenuItemCategory;
+};
+
+const CATEGORY_OPTIONS = Object.values(MenuItemCategory) as MenuItemCategory[];
 
 export default function MenuItemsAdminPage() {
   const [rows, setRows] = React.useState<MenuItemDTO[]>([]);
+  const [foods, setFoods] = React.useState<FoodItemDTO[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState<MenuItemWriteDTO>({
-    foodItemId: '' as any,
-    category: MenuItemCategory.SUSHI_ROLLS,
+  const [form, setForm] = React.useState<EditState>({
+    foodItemId: "",
+    price: "",
     available: true,
-    price: '0.00'
+    category: MenuItemCategory.SUSHI_STARTER,
   });
 
-  const load = React.useCallback(async () => setRows(await listAllMenuItems()), []);
-  React.useEffect(() => { load(); }, [load]);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [mi, fi] = await Promise.all([listAllMenuItems(), listFoodItems()]);
+      setRows(mi);
+      setFoods(fi);
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Failed to load menu items");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const onEdit = (r: MenuItemDTO) => {
-    setEditingId(String(r.id));
-    setForm({ foodItemId: r.foodItemId, category: r.category, available: r.available, price: String(r.price) });
+  React.useEffect(() => {
+    load();
+  }, []);
+
+  const onEdit = (it?: MenuItemDTO) => {
+    setForm(
+      it
+        ? {
+            id: String(it.id),
+            foodItemId: String(it.foodItemId ?? ""),
+            price: String(it.price ?? ""),
+            available: Boolean(it.available ?? true),
+            category: it.category,
+          }
+        : {
+            foodItemId: "",
+            price: "",
+            available: true,
+            category: MenuItemCategory.SUSHI_STARTER,
+          }
+    );
     setOpen(true);
   };
-  const onCreate = () => { setEditingId(null); setForm({ foodItemId: '' as any, category: MenuItemCategory.SUSHI_ROLLS, available: true, price: '0.00' }); setOpen(true); };
 
-  const onSave = async () => {
-    if (editingId) await updateMenuItem(editingId, form);
-    else await createMenuItem(form);
-    setOpen(false); await load();
+  const save = async () => {
+    try {
+      const payload: MenuItemWriteDTO = {
+        foodItemId: form.foodItemId,
+        price: String(form.price || "0"),
+        available: form.available,
+        category: form.category,
+      };
+      if (form.id) {
+        await updateMenuItem(form.id, payload);
+        notifySuccess("Updated");
+      } else {
+        await createMenuItem(payload);
+        notifySuccess("Created");
+      }
+      setOpen(false);
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Save failed");
+    }
   };
 
   const onDelete = async (id: string) => {
-    if (!window.confirm('Delete this menu item?')) return;
-    await deleteMenuItem(id); await load();
+    if (!window.confirm("Delete this item?")) return;
+    try {
+      await deleteMenuItem(id);
+      notifySuccess("Deleted");
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Delete failed");
+    }
   };
 
-  return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 800, color: '#0B2D24' }}>Menu Items</Typography>
+  const foodName = (id?: string) =>
+    foods.find((f) => String(f.id) === String(id))?.name || id;
 
-      <Paper elevation={0} sx={card}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button onClick={onCreate} variant="contained" sx={{ bgcolor: '#D1A01F', color: '#0B2D24', fontWeight: 800, '&:hover': { bgcolor: '#E2B437' } }}>
-            New Menu Item
+  return (
+    <>
+      <Paper
+        elevation={0}
+        sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <Typography
+            variant="h6"
+            sx={{ color: AK_DARK, fontWeight: 800, flex: 1 }}
+          >
+            Menu Items
+          </Typography>
+          <Button
+            onClick={() => onEdit()}
+            variant="contained"
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#E2B437" },
+            }}
+          >
+            Add
           </Button>
         </Box>
 
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>FoodItemId</TableCell>
+              <TableCell>Dish</TableCell>
               <TableCell>Category</TableCell>
-              <TableCell>Available</TableCell>
               <TableCell>Price</TableCell>
-              <TableCell width={120} />
+              <TableCell>Available</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map(r => (
-              <TableRow key={String(r.id)}>
-                <TableCell>{r.foodItemId}</TableCell>
-                <TableCell>{r.category}</TableCell>
-                <TableCell>{r.available ? 'Yes' : 'No'}</TableCell>
-                <TableCell>CHF {r.price}</TableCell>
+            {!loading && rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5}>No items</TableCell>
+              </TableRow>
+            )}
+            {rows.map((it) => (
+              <TableRow key={String(it.id)}>
+                <TableCell>{foodName(it.foodItemId)}</TableCell>
+                <TableCell>{it.category}</TableCell>
+                <TableCell>CHF {Number(it.price || "0").toFixed(2)}</TableCell>
+                <TableCell>{it.available ? "Yes" : "No"}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={() => onEdit(r)}><EditIcon /></IconButton>
-                  <IconButton color="error" onClick={() => onDelete(String(r.id))}><DeleteIcon /></IconButton>
+                  <Button
+                    onClick={() => onEdit(it)}
+                    size="small"
+                    variant="outlined"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => onDelete(String(it.id))}
+                    size="small"
+                    variant="text"
+                    color="error"
+                    sx={{ ml: 1 }}
+                  >
+                    Delete
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -81,28 +206,89 @@ export default function MenuItemsAdminPage() {
         </Table>
       </Paper>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editingId ? 'Edit Menu Item' : 'New Menu Item'}</DialogTitle>
-        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
-          <TextField label="Food Item ID" value={form.foodItemId as any} onChange={(e) => setForm({ ...form, foodItemId: e.target.value as any })} />
-          <FormControl>
-            <InputLabel>Category</InputLabel>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          {form.id ? "Edit Menu Item" : "Add Menu Item"}
+        </DialogTitle>
+        <DialogContent sx={{ display: "grid", gap: 2, pt: 2 }}>
+          <Box>
+            <InputLabel id="food-label">Food Item</InputLabel>
             <Select
-              label="Category"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value as MenuItemCategory })}
+              labelId="food-label"
+              value={form.foodItemId}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, foodItemId: String(e.target.value) }))
+              }
+              fullWidth
             >
-              {categories.map(c => <MItem key={c} value={c}>{c}</MItem>)}
+              {foods.map((f) => (
+                <MenuItem key={String(f.id)} value={String(f.id)}>
+                  {f.name}
+                </MenuItem>
+              ))}
             </Select>
-          </FormControl>
-          <FormControlLabel control={<Switch checked={form.available} onChange={e => setForm({ ...form, available: e.target.checked })} />} label="Available" />
-          <TextField label="Price (CHF)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          </Box>
+
+          <Box>
+            <InputLabel id="cat-label">Category</InputLabel>
+            <Select
+              labelId="cat-label"
+              value={form.category}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  category: e.target.value as MenuItemCategory,
+                }))
+              }
+              fullWidth
+            >
+              {CATEGORY_OPTIONS.map((c) => (
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+
+          <TextField
+            label="Price (CHF)"
+            type="number"
+            value={form.price}
+            onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={!!form.available}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, available: e.target.checked }))
+                }
+              />
+            }
+            label="Available"
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={onSave} variant="contained">Save</Button>
+          <Button
+            onClick={save}
+            variant="contained"
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#E2B437" },
+            }}
+          >
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

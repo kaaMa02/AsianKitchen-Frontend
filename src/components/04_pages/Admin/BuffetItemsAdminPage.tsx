@@ -1,71 +1,193 @@
-import * as React from 'react';
+import * as React from "react";
 import {
-  Box, Paper, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, FormControlLabel, Switch
-} from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import { BuffetItemReadDTO, BuffetItemWriteDTO } from '../../../types/api-types';
-import { listBuffetItems, createBuffetItem, updateBuffetItem, deleteBuffetItem } from '../../../services/buffetItems';
+  Paper,
+  Typography,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControlLabel,
+  Checkbox,
+  MenuItem,
+  Select,
+  InputLabel,
+  Box,
+} from "@mui/material";
+import {
+  listAllBuffetItems,
+  createBuffetItem,
+  updateBuffetItem,
+  deleteBuffetItem,
+} from "../../../services/buffetItems";
+import { listFoodItems } from "../../../services/foodItems";
+import {
+  BuffetItemReadDTO,
+  BuffetItemWriteDTO,
+  FoodItemDTO,
+} from "../../../types/api-types";
+import { notifyError, notifySuccess } from "../../../services/toast";
 
-const card = { p: 3, borderRadius: 2, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' } as const;
+const AK_DARK = "#0B2D24";
+const AK_GOLD = "#D1A01F";
+
+type EditState = {
+  id?: string;
+  foodItemId: string;
+  price: string;
+  available: boolean;
+};
 
 export default function BuffetItemsAdminPage() {
   const [rows, setRows] = React.useState<BuffetItemReadDTO[]>([]);
+  const [foods, setFoods] = React.useState<FoodItemDTO[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState<BuffetItemWriteDTO>({ foodItemId: '' as any, available: true, price: '0.00' });
+  const [form, setForm] = React.useState<EditState>({
+    foodItemId: "",
+    price: "",
+    available: true,
+  });
 
-  const load = React.useCallback(async () => setRows(await listBuffetItems()), []);
-  React.useEffect(() => { load(); }, [load]);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [mi, fi] = await Promise.all([
+        listAllBuffetItems(),
+        listFoodItems(),
+      ]);
+      setRows(mi);
+      setFoods(fi);
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Failed to load buffet items");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const onEdit = (r: BuffetItemReadDTO) => {
-    setEditingId(String(r.id));
-    setForm({ foodItemId: r.foodItemId, available: r.available, price: String(r.price) });
+  React.useEffect(() => {
+    load();
+  }, []);
+
+  const onEdit = (it?: BuffetItemReadDTO) => {
+    setForm(
+      it
+        ? {
+            id: String(it.id),
+            foodItemId: String(it.foodItemId ?? ""),
+            price: String(it.price ?? ""),
+            available: Boolean(it.available ?? true),
+          }
+        : { foodItemId: "", price: "", available: true }
+    );
     setOpen(true);
   };
-  const onCreate = () => { setEditingId(null); setForm({ foodItemId: '' as any, available: true, price: '0.00' }); setOpen(true); };
 
-  const onSave = async () => {
-    if (editingId) await updateBuffetItem(editingId, form);
-    else await createBuffetItem(form);
-    setOpen(false); await load();
+  const save = async () => {
+    try {
+      const payload: BuffetItemWriteDTO = {
+        foodItemId: form.foodItemId,
+        price: String(form.price || "0"),
+        available: form.available,
+      };
+      if (form.id) {
+        await updateBuffetItem(form.id, payload);
+        notifySuccess("Updated");
+      } else {
+        await createBuffetItem(payload);
+        notifySuccess("Created");
+      }
+      setOpen(false);
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Save failed");
+    }
   };
 
   const onDelete = async (id: string) => {
-    if (!window.confirm('Delete this buffet item?')) return;
-    await deleteBuffetItem(id); await load();
+    if (!window.confirm("Delete this item?")) return;
+    try {
+      await deleteBuffetItem(id);
+      notifySuccess("Deleted");
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Delete failed");
+    }
   };
 
-  return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 800, color: '#0B2D24' }}>Buffet Items</Typography>
+  const foodName = (id?: string) =>
+    foods.find((f) => String(f.id) === String(id))?.name || id;
 
-      <Paper elevation={0} sx={card}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button onClick={onCreate} variant="contained" sx={{ bgcolor: '#D1A01F', color: '#0B2D24', fontWeight: 800, '&:hover': { bgcolor: '#E2B437' } }}>
-            New Buffet Item
+  return (
+    <>
+      <Paper
+        elevation={0}
+        sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <Typography
+            variant="h6"
+            sx={{ color: AK_DARK, fontWeight: 800, flex: 1 }}
+          >
+            Buffet Items
+          </Typography>
+          <Button
+            onClick={() => onEdit()}
+            variant="contained"
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#E2B437" },
+            }}
+          >
+            Add
           </Button>
         </Box>
 
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>FoodItemId</TableCell>
-              <TableCell>Available</TableCell>
+              <TableCell>Dish</TableCell>
               <TableCell>Price</TableCell>
-              <TableCell width={120} />
+              <TableCell>Available</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map(r => (
-              <TableRow key={String(r.id)}>
-                <TableCell>{r.foodItemId}</TableCell>
-                <TableCell>{r.available ? 'Yes' : 'No'}</TableCell>
-                <TableCell>CHF {r.price}</TableCell>
+            {!loading && rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4}>No items</TableCell>
+              </TableRow>
+            )}
+            {rows.map((it) => (
+              <TableRow key={String(it.id)}>
+                <TableCell>{foodName(it.foodItemId)}</TableCell>
+                <TableCell>CHF {Number(it.price || "0").toFixed(2)}</TableCell>
+                <TableCell>{it.available ? "Yes" : "No"}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={() => onEdit(r)}><EditIcon /></IconButton>
-                  <IconButton color="error" onClick={() => onDelete(String(r.id))}><DeleteIcon /></IconButton>
+                  <Button
+                    onClick={() => onEdit(it)}
+                    size="small"
+                    variant="outlined"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => onDelete(String(it.id))}
+                    size="small"
+                    variant="text"
+                    color="error"
+                    sx={{ ml: 1 }}
+                  >
+                    Delete
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -73,18 +195,67 @@ export default function BuffetItemsAdminPage() {
         </Table>
       </Paper>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editingId ? 'Edit Buffet Item' : 'New Buffet Item'}</DialogTitle>
-        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
-          <TextField label="Food Item ID" value={form.foodItemId as any} onChange={(e) => setForm({ ...form, foodItemId: e.target.value as any })} />
-          <FormControlLabel control={<Switch checked={form.available} onChange={e => setForm({ ...form, available: e.target.checked })} />} label="Available" />
-          <TextField label="Price (CHF)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          {form.id ? "Edit Buffet Item" : "Add Buffet Item"}
+        </DialogTitle>
+        <DialogContent sx={{ display: "grid", gap: 2, pt: 2 }}>
+          <Box>
+            <InputLabel id="food-label">Food Item</InputLabel>
+            <Select
+              labelId="food-label"
+              value={form.foodItemId}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, foodItemId: String(e.target.value) }))
+              }
+              fullWidth
+            >
+              {foods.map((f) => (
+                <MenuItem key={String(f.id)} value={String(f.id)}>
+                  {f.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+          <TextField
+            label="Price (CHF)"
+            type="number"
+            value={form.price}
+            onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={!!form.available}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, available: e.target.checked }))
+                }
+              />
+            }
+            label="Available"
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={onSave} variant="contained">Save</Button>
+          <Button
+            onClick={save}
+            variant="contained"
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#E2B437" },
+            }}
+          >
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

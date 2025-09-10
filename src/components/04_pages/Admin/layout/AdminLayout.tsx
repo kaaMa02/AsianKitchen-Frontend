@@ -1,23 +1,32 @@
 import * as React from 'react';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import {
-  AppBar, Toolbar, Typography, IconButton, Drawer, List, ListItemButton,
-  ListItemText, Box, Button
+  Box, Drawer, List, ListItemButton, ListItemText, AppBar, Toolbar, IconButton, Typography, Button
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import EventSeatIcon from '@mui/icons-material/EventSeat';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import SetMealIcon from '@mui/icons-material/SetMeal';
+import RamenDiningIcon from '@mui/icons-material/RamenDining';
+import StoreIcon from '@mui/icons-material/Store';
+import PeopleIcon from '@mui/icons-material/People';
+import LunchDiningIcon from '@mui/icons-material/LunchDining';
 import { useAuth } from '../../../../contexts/AuthContext';
 
 const AK_DARK = '#0B2D24';
 const AK_GOLD = '#D1A01F';
 
-const NAV = [
-  { to: '/admin', label: 'Dashboard' },
-  { to: '/admin/reservations', label: 'Reservations' },
-  { to: '/admin/restaurant-info', label: 'Restaurant Info' },
-  { to: '/admin/food-items', label: 'Food Items' },
-  { to: '/admin/menu-items', label: 'Menu Items' },
-  { to: '/admin/buffet-items', label: 'Buffet Items' },
-  { to: '/admin/users', label: 'Users' },
+const links = [
+  { to: '/admin', label: 'Dashboard', icon: <DashboardIcon /> },
+  { to: '/admin/reservations', label: 'Reservations', icon: <EventSeatIcon /> },
+  { to: '/admin/orders', label: 'Menu Orders', icon: <ReceiptLongIcon /> },
+  { to: '/admin/buffet-orders', label: 'Buffet Orders', icon: <RamenDiningIcon /> },
+  { to: '/admin/food-items', label: 'Food Items', icon: <SetMealIcon /> },
+  { to: '/admin/menu-items', label: 'Menu Items', icon: <LunchDiningIcon /> },
+  { to: '/admin/buffet-items', label: 'Buffet Items', icon: <LunchDiningIcon /> },
+  { to: '/admin/restaurant-info', label: 'Restaurant Info', icon: <StoreIcon /> },
+  { to: '/admin/users', label: 'Users', icon: <PeopleIcon /> },
 ];
 
 export default function AdminLayout() {
@@ -26,40 +35,43 @@ export default function AdminLayout() {
   const loc = useLocation();
 
   const drawer = (
-    <Box sx={{ width: 260 }}>
-      <Box sx={{ p: 2, bgcolor: AK_DARK, color: '#EFE7CE' }}>
-        <Typography sx={{ fontWeight: 800 }}>Admin</Typography>
-        <Typography variant="body2" sx={{ opacity: 0.85 }}>{username}</Typography>
-      </Box>
+    <Box sx={{ width: 260, bgcolor: '#F6F0DE', height: '100%' }}>
+      <Box sx={{ p: 2, fontWeight: 800, color: AK_DARK }}>Admin</Box>
       <List>
-        {NAV.map(item => (
-          <ListItemButton
-            key={item.to}
-            component={RouterLink}
-            to={item.to}
-            selected={loc.pathname === item.to || (item.to !== '/admin' && loc.pathname.startsWith(item.to))}
-            onClick={() => setOpen(false)}
-          >
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        ))}
+        {links.map(l => {
+          const active = loc.pathname === l.to;
+          return (
+            <ListItemButton
+              key={l.to}
+              component={RouterLink}
+              to={l.to}
+              onClick={() => setOpen(false)}
+              sx={{
+                borderLeft: active ? `3px solid ${AK_GOLD}` : '3px solid transparent',
+                bgcolor: active ? 'rgba(209,160,31,0.08)' : 'transparent'
+              }}
+            >
+              <Box sx={{ mr: 1.25 }}>{l.icon}</Box>
+              <ListItemText primary={l.label} primaryTypographyProps={{ sx: { color: AK_DARK } }} />
+            </ListItemButton>
+          );
+        })}
       </List>
     </Box>
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#F6F0DE' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#faf9f3' }}>
       <AppBar position="fixed" elevation={0} sx={{ bgcolor: AK_DARK }}>
         <Toolbar>
-          <IconButton onClick={() => setOpen(true)} edge="start" color="inherit" sx={{ mr: 1, display: { md: 'none' } }}>
+          <IconButton color="inherit" edge="start" onClick={() => setOpen(true)} sx={{ mr: 1 }}>
             <MenuIcon />
           </IconButton>
-          <Typography sx={{ flex: 1, color: '#EFE7CE', fontWeight: 800 }}>
-            Asian Kitchen — Admin
-          </Typography>
+          <Typography sx={{ flex: 1, fontWeight: 800 }}>Asian Kitchen · Admin</Typography>
+          <Typography sx={{ mr: 2, opacity: 0.9 }}>{username}</Typography>
           <Button
-            onClick={logout}
             variant="contained"
+            onClick={logout}
             sx={{ bgcolor: AK_GOLD, color: AK_DARK, fontWeight: 800, '&:hover': { bgcolor: '#E2B437' } }}
           >
             Logout
@@ -67,15 +79,14 @@ export default function AdminLayout() {
         </Toolbar>
       </AppBar>
 
-      <Toolbar />
+      <Toolbar /> {/* spacer */}
+      <Drawer open={open} onClose={() => setOpen(false)}>{drawer}</Drawer>
 
-      <Box sx={{ display: 'flex' }}>
-        <Box sx={{ width: 260, display: { xs: 'none', md: 'block' } }}>{drawer}</Box>
-        <Drawer open={open} onClose={() => setOpen(false)} sx={{ display: { md: 'none' } }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '260px 1fr', alignItems: 'flex-start' }}>
+        <Box sx={{ display: { xs: 'none', md: 'block' }, borderRight: '1px solid #eee', minHeight: 'calc(100vh - 64px)' }}>
           {drawer}
-        </Drawer>
-
-        <Box sx={{ flex: 1, p: { xs: 2, md: 3 } }}>
+        </Box>
+        <Box sx={{ p: 3 }}>
           <Outlet />
         </Box>
       </Box>

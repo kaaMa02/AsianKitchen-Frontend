@@ -1,21 +1,16 @@
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { ThemeProvider, CssBaseline } from '@mui/material';
-import { theme } from './styles/theme';
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { ThemeProvider, CssBaseline } from "@mui/material";
+import { theme } from "./styles/theme";
+import App from "./App";
+import { AuthProvider } from "./contexts/AuthContext";
+import { RestaurantInfoProvider } from "./contexts/RestaurantInfoContext";
+import { CartProvider } from "./contexts/CartContext";
+import { ToastProvider } from "./services/toast";
 
-import '@fontsource/poppins/300.css';
-import '@fontsource/poppins/400.css';
-import '@fontsource/poppins/500.css';
-import '@fontsource/poppins/600.css';
-import '@fontsource/poppins/700.css';
-import '@fontsource/poppins/800.css';
-
-import App from './App';
-import { AuthProvider } from './contexts/AuthContext';
-import { RestaurantInfoProvider } from './contexts/RestaurantInfoContext';
-import { CartProvider } from './contexts/CartContext';
-
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
+const root = ReactDOM.createRoot(
+  document.getElementById("root") as HTMLElement
+);
 root.render(
   <ThemeProvider theme={theme}>
     <CssBaseline />
@@ -23,7 +18,9 @@ root.render(
       <AuthProvider>
         <RestaurantInfoProvider>
           <CartProvider>
-            <App />
+            <ToastProvider>
+              <App />
+            </ToastProvider>
           </CartProvider>
         </RestaurantInfoProvider>
       </AuthProvider>

@@ -30,10 +30,9 @@ export interface RegisterRequestDTO {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // User
-
 export enum Role {
   CUSTOMER = "CUSTOMER",
-  ADMIN = "ADMIN"
+  ADMIN = "ADMIN",
 }
 
 export interface UserReadDTO {
@@ -41,13 +40,14 @@ export interface UserReadDTO {
   username: string;
   firstName: string;
   lastName: string;
-  email?: string;
+  email: string;
   phoneNumber?: string;
   role: Role;
 }
 
 export interface UserWriteDTO {
   username: string;
+  email: string;
   password: string;
   role: Role;
 }
@@ -55,15 +55,20 @@ export interface UserWriteDTO {
 export interface UserProfileUpdateDTO {
   firstName: string;
   lastName: string;
-  email?: string;
+  email: string;
   phoneNumber?: string;
   address?: AddressDTO;
   password?: string;
 }
 
+export interface AdminUserUpdateDTO {
+  username: string;
+  email: string;
+  role: Role;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Food items
-
 export interface FoodItemDTO {
   id?: UUID;
   name: string;
@@ -97,7 +102,7 @@ export interface BuffetOrderItemDTO {
 
 export enum OrderType {
   DELIVERY = "DELIVERY",
-  TAKEAWAY = "TAKEAWAY"
+  TAKEAWAY = "TAKEAWAY",
 }
 
 export enum OrderStatus {
@@ -106,7 +111,7 @@ export enum OrderStatus {
   PREPARING = "PREPARING",
   ON_THE_WAY = "ON_THE_WAY",
   DELIVERED = "DELIVERED",
-  CANCELLED = "CANCELLED"
+  CANCELLED = "CANCELLED",
 }
 
 export interface CustomerInfoDTO {
@@ -134,6 +139,8 @@ export interface BuffetOrderReadDTO {
   totalPrice: BigDecimal;
   specialInstructions?: string; // added
   orderItems?: BuffetOrderItemDTO[]; // added if frontend needs items
+  paymentStatus?: PaymentStatus;
+  paymentIntentId?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,6 +209,8 @@ export interface CustomerOrderReadDTO {
   totalPrice: BigDecimal;
   createdAt: LocalDateTime;
   specialInstructions?: string;
+  paymentStatus?: PaymentStatus;
+  paymentIntentId?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,7 +221,7 @@ export enum ReservationStatus {
   CONFIRMED = "CONFIRMED",
   REJECTED = "REJECTED",
   NO_SHOW = "NO_SHOW",
-  CANCELLED = "CANCELLED"
+  CANCELLED = "CANCELLED",
 }
 
 export interface ReservationWriteDTO {
@@ -248,7 +257,8 @@ export interface RestaurantInfoWriteDTO {
   instagramUrl?: string;
   googleMapsUrl?: string;
   openingHours?: string;
-  address?: AddressDTO;
+  address: AddressDTO;
+  deliveryNote?: string;
 }
 
 export interface RestaurantInfoReadDTO {
@@ -267,8 +277,8 @@ export interface PaymentIntentResponseDTO {
   clientSecret: string;
   amounts?: {
     total: number; // rappen
-    tax: number;   // rappen
-    net: number;   // rappen
+    tax: number; // rappen
+    net: number; // rappen
     vatRatePct?: number;
   };
 }
@@ -291,4 +301,11 @@ export interface ContactMessageReadDTO {
   phone?: string;
   message: string;
   createdAt: LocalDateTime;
+}
+
+// --- Payments ---
+export enum PaymentStatus {
+  REQUIRES_PAYMENT_METHOD = "REQUIRES_PAYMENT_METHOD",
+  SUCCEEDED = "SUCCEEDED",
+  FAILED = "FAILED",
 }

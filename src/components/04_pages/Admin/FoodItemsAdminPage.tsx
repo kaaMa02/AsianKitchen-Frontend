@@ -1,56 +1,82 @@
 import * as React from 'react';
 import {
-  Box, Paper, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton
+  Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import { FoodItemDTO } from '../../../types/api-types';
 import { listFoodItems, createFoodItem, updateFoodItem, deleteFoodItem } from '../../../services/foodItems';
+import { notifyError, notifySuccess } from '../../../services/toast';
+import { FoodItemDTO } from '../../../types/api-types';
 
-const card = { p: 3, borderRadius: 2, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' } as const;
+const AK_DARK = '#0B2D24';
+const AK_GOLD = '#D1A01F';
+
+type EditState = Partial<FoodItemDTO> & { id?: string };
 
 export default function FoodItemsAdminPage() {
   const [rows, setRows] = React.useState<FoodItemDTO[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<FoodItemDTO | null>(null);
-  const [form, setForm] = React.useState<FoodItemDTO>({ name: '' });
+  const [form, setForm] = React.useState<EditState>({ name: '', description: '' });
 
-  const load = React.useCallback(async () => {
-    const data = await listFoodItems();
-    setRows(data);
-  }, []);
-  React.useEffect(() => { load(); }, [load]);
-
-  const onEdit = (r: FoodItemDTO) => { setEditing(r); setForm(r); setOpen(true); };
-  const onCreate = () => { setEditing(null); setForm({ name: '' }); setOpen(true); };
-
-  const onSave = async () => {
-    if (editing?.id) await updateFoodItem(String(editing.id), form);
-    else await createFoodItem(form);
-    setOpen(false); await load();
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await listFoodItems();
+      setRows(data);
+    } catch (e:any) {
+      notifyError(e?.response?.data?.message || 'Failed to load food items');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const onDelete = async (id?: string) => {
-    if (!id) return;
+  React.useEffect(() => { load(); }, []);
+
+  const onEdit = (it?: FoodItemDTO) => {
+    setForm({
+      id: it ? String(it.id) : undefined,
+      name: it?.name || '',
+      description: it?.description || '',
+      // add more fields here if your DTO has them
+    });
+    setOpen(true);
+  };
+
+  const save = async () => {
+    try {
+      if (form.id) {
+        const { id, ...payload } = form;
+        await updateFoodItem(id!, payload as any);
+        notifySuccess('Updated');
+      } else {
+        const { id, ...payload } = form;
+        await createFoodItem(payload as any);
+        notifySuccess('Created');
+      }
+      setOpen(false);
+      await load();
+    } catch (e:any) {
+      notifyError(e?.response?.data?.message || 'Save failed');
+    }
+  };
+
+  const onDelete = async (id: string) => {
     if (!window.confirm('Delete this item?')) return;
-    await deleteFoodItem(id); await load();
+    try {
+      await deleteFoodItem(id);
+      notifySuccess('Deleted');
+      await load();
+    } catch (e:any) {
+      notifyError(e?.response?.data?.message || 'Delete failed');
+    }
   };
-
-  const bind = (k: keyof FoodItemDTO) => ({
-    value: (form as any)[k] ?? '',
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
-  });
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 800, color: '#0B2D24' }}>Food Items</Typography>
-
-      <Paper elevation={0} sx={card}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button onClick={onCreate} variant="contained" sx={{ bgcolor: '#D1A01F', color: '#0B2D24', fontWeight: 800, '&:hover': { bgcolor: '#E2B437' } }}>
-            New Food Item
-          </Button>
+    <>
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' }}>
+        <Box sx={{ display:'flex', alignItems:'center', mb:2 }}>
+          <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, flex:1 }}>Food Items</Typography>
+          <Button onClick={() => onEdit()} variant="contained" sx={{ bgcolor: AK_GOLD, color: AK_DARK, fontWeight: 800, '&:hover':{ bgcolor:'#E2B437' }}}>Add</Button>
         </Box>
 
         <Table size="small">
@@ -58,23 +84,18 @@ export default function FoodItemsAdminPage() {
             <TableRow>
               <TableCell>Name</TableCell>
               <TableCell>Description</TableCell>
-              <TableCell>Ingredients</TableCell>
-              <TableCell>Allergies</TableCell>
-              <TableCell>Image</TableCell>
-              <TableCell width={120} />
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map(r => (
-              <TableRow key={String(r.id)}>
-                <TableCell>{r.name}</TableCell>
-                <TableCell>{r.description}</TableCell>
-                <TableCell>{r.ingredients}</TableCell>
-                <TableCell>{r.allergies}</TableCell>
-                <TableCell>{r.imageUrl}</TableCell>
+            {!loading && rows.length === 0 && <TableRow><TableCell colSpan={3}>No items</TableCell></TableRow>}
+            {rows.map(it => (
+              <TableRow key={String(it.id)}>
+                <TableCell>{it.name}</TableCell>
+                <TableCell>{it.description}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={() => onEdit(r)}><EditIcon /></IconButton>
-                  <IconButton color="error" onClick={() => onDelete(String(r.id))}><DeleteIcon /></IconButton>
+                  <Button onClick={() => onEdit(it)} size="small" variant="outlined">Edit</Button>
+                  <Button onClick={() => onDelete(String(it.id))} size="small" variant="text" color="error" sx={{ ml:1 }}>Delete</Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -83,19 +104,16 @@ export default function FoodItemsAdminPage() {
       </Paper>
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editing ? 'Edit Food Item' : 'New Food Item'}</DialogTitle>
-        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
-          <TextField label="Name" {...bind('name')} required />
-          <TextField label="Description" {...bind('description')} multiline />
-          <TextField label="Ingredients" {...bind('ingredients')} multiline />
-          <TextField label="Allergies" {...bind('allergies')} multiline />
-          <TextField label="Image URL" {...bind('imageUrl')} />
+        <DialogTitle>{form.id ? 'Edit Food Item' : 'Add Food Item'}</DialogTitle>
+        <DialogContent sx={{ display:'grid', gap:2, pt:2 }}>
+          <TextField label="Name" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          <TextField label="Description" value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} multiline minRows={3} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={onSave} variant="contained">Save</Button>
+          <Button onClick={save} variant="contained" sx={{ bgcolor: AK_GOLD, color: AK_DARK, fontWeight: 800, '&:hover':{ bgcolor:'#E2B437' }}}>Save</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

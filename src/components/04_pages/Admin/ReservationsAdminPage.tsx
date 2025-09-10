@@ -1,84 +1,87 @@
 import * as React from 'react';
-import {
-  Box, Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Menu, MenuItem, Chip
-} from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import { ReservationReadDTO, ReservationStatus } from '../../../types/api-types';
+import { Box, Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody, Button, Chip } from '@mui/material';
 import { listReservations, setReservationStatus, deleteReservation } from '../../../services/reservations';
+import { notifyError, notifySuccess } from '../../../services/toast';
+import { ReservationReadDTO, ReservationStatus } from '../../../types/api-types';
 
-const card = { p: 3, borderRadius: 2, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' } as const;
-
-function StatusChip({ s }:{s:ReservationStatus}) {
-  const map: Record<ReservationStatus,string> = {
-    REQUESTED: 'default', CONFIRMED: 'success', REJECTED: 'error', NO_SHOW: 'warning', CANCELLED: 'warning'
-  } as any;
-  return <Chip size="small" label={s} color={map[s] as any} />;
-}
+const AK_DARK = '#0B2D24';
+const AK_GOLD = '#D1A01F';
 
 export default function ReservationsAdminPage() {
   const [rows, setRows] = React.useState<ReservationReadDTO[]>([]);
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [menuId, setMenuId] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
-  const load = React.useCallback(async () => setRows(await listReservations()), []);
-  React.useEffect(() => { load(); }, [load]);
-
-  const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { setAnchorEl(e.currentTarget); setMenuId(id); };
-  const closeMenu = () => { setAnchorEl(null); setMenuId(null); };
-
-  const change = async (s: ReservationStatus) => {
-    if (!menuId) return;
-    await setReservationStatus(menuId, s);
-    closeMenu(); await load();
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await listReservations();
+      setRows(data);
+    } catch (e:any) {
+      notifyError(e?.response?.data?.message || 'Failed to load reservations');
+    } finally {
+      setLoading(false);
+    }
   };
-  const remove = async () => {
-    if (!menuId) return;
+
+  React.useEffect(() => { load(); }, []);
+
+  const setStatus = async (id: string, status: ReservationStatus) => {
+    try {
+      await setReservationStatus(id, status);
+      notifySuccess('Updated');
+      await load();
+    } catch (e:any) {
+      notifyError(e?.response?.data?.message || 'Failed to update');
+    }
+  };
+
+  const onDelete = async (id: string) => {
     if (!window.confirm('Delete this reservation?')) return;
-    await deleteReservation(menuId);
-    closeMenu(); await load();
+    try {
+      await deleteReservation(id);
+      notifySuccess('Deleted');
+      await load();
+    } catch (e:any) {
+      notifyError(e?.response?.data?.message || 'Failed to delete');
+    }
   };
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 800, color: '#0B2D24' }}>Reservations</Typography>
-      <Paper elevation={0} sx={card}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>When</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Phone</TableCell>
-              <TableCell>People</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell width={60} />
+    <Paper elevation={0} sx={{ p: 3, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' }}>
+      <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>Reservations</Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Name</TableCell>
+            <TableCell>Date/Time</TableCell>
+            <TableCell>People</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {!loading && rows.length === 0 && (
+            <TableRow><TableCell colSpan={5}>No reservations</TableCell></TableRow>
+          )}
+          {rows.map(r => (
+            <TableRow key={String(r.id)}>
+              <TableCell>{r.customerInfo?.firstName} {r.customerInfo?.lastName}</TableCell>
+              <TableCell>{String(r.reservationDateTime).replace('T',' ')}</TableCell>
+              <TableCell>{r.numberOfPeople}</TableCell>
+              <TableCell>
+                <Chip label={r.status} size="small" />
+              </TableCell>
+              <TableCell align="right">
+                <Box sx={{ display:'inline-flex', gap:1, flexWrap:'wrap' }}>
+                  <Button onClick={() => setStatus(String(r.id), ReservationStatus.CONFIRMED)} size="small" variant="contained" sx={{ bgcolor: AK_GOLD, color: AK_DARK, '&:hover': { bgcolor: '#E2B437' }}}>Confirm</Button>
+                  <Button onClick={() => setStatus(String(r.id), ReservationStatus.REJECTED)} size="small" variant="outlined">Reject</Button>
+                  <Button onClick={() => onDelete(String(r.id))} size="small" variant="text" color="error">Delete</Button>
+                </Box>
+              </TableCell>
             </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map(r => (
-              <TableRow key={String(r.id)}>
-                <TableCell>{r.reservationDateTime}</TableCell>
-                <TableCell>{r.customerInfo.firstName} {r.customerInfo.lastName}</TableCell>
-                <TableCell>{r.customerInfo.email}</TableCell>
-                <TableCell>{r.customerInfo.phone}</TableCell>
-                <TableCell>{r.numberOfPeople}</TableCell>
-                <TableCell><StatusChip s={r.status} /></TableCell>
-                <TableCell align="right">
-                  <IconButton onClick={(e) => openMenu(e, String(r.id))}><MoreVertIcon /></IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-
-        <Menu open={!!anchorEl} anchorEl={anchorEl} onClose={closeMenu}>
-          <MenuItem onClick={() => change(ReservationStatus.CONFIRMED)}>Confirm</MenuItem>
-          <MenuItem onClick={() => change(ReservationStatus.REJECTED)}>Reject</MenuItem>
-          <MenuItem onClick={() => change(ReservationStatus.CANCELLED)}>Cancel</MenuItem>
-          <MenuItem onClick={remove}>Delete</MenuItem>
-        </Menu>
-      </Paper>
-    </Box>
+          ))}
+        </TableBody>
+      </Table>
+    </Paper>
   );
 }

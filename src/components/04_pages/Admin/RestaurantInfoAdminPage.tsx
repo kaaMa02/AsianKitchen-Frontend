@@ -1,156 +1,173 @@
-// src/components/04_pages/Admin/RestaurantInfoAdminPage.tsx
-import * as React from 'react';
-import { Box, Paper, Typography, Button, TextField, Alert } from '@mui/material';
-import type { RestaurantInfoReadDTO, RestaurantInfoWriteDTO, AddressDTO } from '../../../types/api-types';
+import * as React from "react";
+import { Paper, Typography, TextField, Button, Box } from "@mui/material";
 import {
-  listRestaurantInfo,      // returns RestaurantInfoReadDTO[]
-  createRestaurantInfo,
+  listRestaurantInfo,
   updateRestaurantInfo,
-  deleteRestaurantInfo,
-} from '../../../services/restaurantInfo';
+} from "../../../services/restaurantInfo";
+import { notifyError, notifySuccess } from "../../../services/toast";
+import {
+  RestaurantInfoWriteDTO,
+  RestaurantInfoReadDTO,
+} from "../../../types/api-types";
 
-const AK_DARK = '#0B2D24';
-const AK_GOLD = '#D1A01F';
-const card = { p: 3, borderRadius: 2, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' } as const;
-
-// ----- helpers -----
-type RestaurantInfoForm = Omit<RestaurantInfoWriteDTO, 'address'> & {
-  address: Partial<AddressDTO>; // allow blanks/undefined while editing
-};
-
-const toAddressDTO = (a?: Partial<AddressDTO> | null): AddressDTO => ({
-  street: a?.street ?? '',
-  streetNo: a?.streetNo ?? '',
-  plz: a?.plz ?? '',
-  city: a?.city ?? '',
-});
-
-const EMPTY_FORM: RestaurantInfoForm = {
-  name: '',
-  phone: '',
-  email: '',
-  instagramUrl: '',
-  googleMapsUrl: '',
-  aboutText: '',
-  openingHours: '',
-  address: {}, // partial on purpose
-};
+const AK_DARK = "#0B2D24";
+const AK_GOLD = "#D1A01F";
 
 export default function RestaurantInfoAdminPage() {
-  const [list, setList] = React.useState<RestaurantInfoReadDTO[]>([]);
-  const [form, setForm] = React.useState<RestaurantInfoForm>(EMPTY_FORM);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [msg, setMsg] = React.useState<string>();
+  const [id, setId] = React.useState<string | undefined>(undefined);
+  const [form, setForm] = React.useState<RestaurantInfoWriteDTO>({
+    name: "",
+    phone: "",
+    address: { street: "", streetNo: "", plz: "", city: "" },
+    openingHours: "",
+    deliveryNote: "",
+  });
 
-  const load = React.useCallback(async () => {
-    const data = await listRestaurantInfo(); // your service returns an array
-    setList(data);
-    if (data.length) {
-      const r = data[0];
-      setEditingId(String(r.id));
-      setForm({
-        name: r.name ?? '',
-        phone: r.phone ?? '',
-        email: r.email ?? '',
-        instagramUrl: r.instagramUrl ?? '',
-        googleMapsUrl: r.googleMapsUrl ?? '',
-        aboutText: r.aboutText ?? '',
-        openingHours: r.openingHours ?? '',
-        address: {
-          street: r.address?.street,
-          streetNo: r.address?.streetNo,
-          plz: r.address?.plz,
-          city: r.address?.city,
-        },
-      });
-    } else {
-      setEditingId(null);
-      setForm(EMPTY_FORM);
+  const load = async () => {
+    try {
+      const all = await listRestaurantInfo();
+      if (all.length > 0) {
+        const row = all[0] as unknown as RestaurantInfoReadDTO;
+        setId(String(row.id));
+        setForm({
+          name: row.name || "",
+          phone: row.phone || "",
+          address: {
+            street: row.address?.street || "",
+            streetNo: row.address?.streetNo || "",
+            plz: row.address?.plz || "",
+            city: row.address?.city || "",
+          },
+          openingHours: row.openingHours || "",
+          deliveryNote: (row as any).deliveryNote || "",
+        });
+      }
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Failed to load info");
     }
-  }, []);
-
-  React.useEffect(() => { load(); }, [load]);
-
-  const save = async () => {
-    setMsg(undefined);
-    const payload: RestaurantInfoWriteDTO = {
-      ...form,
-      address: toAddressDTO(form.address), // <-- coerce to strict AddressDTO
-    };
-    if (editingId) {
-      await updateRestaurantInfo(editingId, payload);
-    } else {
-      await createRestaurantInfo(payload);
-    }
-    await load();
-    setMsg('Saved!');
   };
 
-  const bind = (k: keyof RestaurantInfoForm) => ({
-    value: (form as any)[k] ?? '',
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm({ ...form, [k]: e.target.value } as RestaurantInfoForm),
-  });
+  React.useEffect(() => {
+    load();
+  }, []);
 
-  const addr = (k: keyof AddressDTO) => ({
-    value: (form.address as any)[k] ?? '',
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm({ ...form, address: { ...form.address, [k]: e.target.value } }),
-  });
+  const save = async () => {
+    if (!id) return;
+    try {
+      const { deliveryNote, ...payload } = form;
+      await updateRestaurantInfo(id, payload as RestaurantInfoWriteDTO);
+      notifySuccess("Saved");
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Save failed");
+    }
+  };
 
   return (
-    <Box sx={{ maxWidth: 1100, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 800, color: AK_DARK }}>
+    <Paper
+      elevation={0}
+      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+    >
+      <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>
         Restaurant Info
       </Typography>
 
-      <Paper elevation={0} sx={card}>
-        {msg && <Alert severity="success" sx={{ mb: 2 }}>{msg}</Alert>}
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+        }}
+      >
+        <TextField
+          label="Name"
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+        />
+        <TextField
+          label="Phone"
+          value={form.phone}
+          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+        />
 
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
-          <TextField label="Name" fullWidth {...bind('name')} />
-          <TextField label="Phone" fullWidth {...bind('phone')} />
-          <TextField label="Email" fullWidth {...bind('email')} />
-          <TextField label="Instagram URL" fullWidth {...bind('instagramUrl')} />
-          <TextField label="Google Maps URL" fullWidth {...bind('googleMapsUrl')} />
+        <TextField
+          label="Street"
+          value={form.address.street}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              address: { ...f.address, street: e.target.value },
+            }))
+          }
+        />
+        <TextField
+          label="No."
+          value={form.address.streetNo}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              address: { ...f.address, streetNo: e.target.value },
+            }))
+          }
+        />
+        <TextField
+          label="PLZ"
+          value={form.address.plz}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              address: { ...f.address, plz: e.target.value },
+            }))
+          }
+        />
+        <TextField
+          label="City"
+          value={form.address.city}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              address: { ...f.address, city: e.target.value },
+            }))
+          }
+        />
 
-          <Box sx={{ gridColumn: '1 / -1' }}>
-            <TextField label="About (short)" fullWidth multiline minRows={2} {...bind('aboutText')} />
-          </Box>
-          <Box sx={{ gridColumn: '1 / -1' }}>
-            <TextField label="Opening hours (one per line)" fullWidth multiline minRows={4} {...bind('openingHours')} />
-          </Box>
+        <TextField
+          label="Opening hours (multiline)"
+          value={form.openingHours}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, openingHours: e.target.value }))
+          }
+          multiline
+          minRows={4}
+          sx={{ gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
+        />
+        <TextField
+          label="Delivery note (optional)"
+          value={form.deliveryNote || ""}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, deliveryNote: e.target.value }))
+          }
+          multiline
+          minRows={2}
+          sx={{ gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
+        />
+      </Box>
 
-          <TextField label="Street" fullWidth {...addr('street')} sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }} />
-          <TextField label="No." fullWidth {...addr('streetNo')} />
-          <TextField label="PLZ" fullWidth {...addr('plz')} />
-          <TextField label="City" fullWidth {...addr('city')} />
-        </Box>
-
-        <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-          <Button
-            onClick={save}
-            variant="contained"
-            sx={{ bgcolor: AK_GOLD, color: AK_DARK, fontWeight: 800, '&:hover': { bgcolor: '#E2B437' } }}
-          >
-            Save
-          </Button>
-          {editingId && (
-            <Button
-              color="error"
-              onClick={async () => {
-                if (!window.confirm('Delete the current info record?')) return;
-                await deleteRestaurantInfo(editingId);
-                setEditingId(null);
-                setForm(EMPTY_FORM);
-                await load();
-              }}
-            >
-              Delete
-            </Button>
-          )}
-        </Box>
-      </Paper>
-    </Box>
+      <Box sx={{ mt: 2 }}>
+        <Button
+          onClick={save}
+          variant="contained"
+          disabled={!id}
+          sx={{
+            bgcolor: AK_GOLD,
+            color: AK_DARK,
+            fontWeight: 800,
+            "&:hover": { bgcolor: "#E2B437" },
+          }}
+        >
+          Save
+        </Button>
+      </Box>
+    </Paper>
   );
 }

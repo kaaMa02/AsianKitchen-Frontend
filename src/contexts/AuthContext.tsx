@@ -1,43 +1,47 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-  FC,
-} from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import http from '../services/http';
-import { notifyError } from '../services/toast';
 import { Role } from '../types/api-types';
 
 export interface AuthContextType {
   role?: Role;
   username?: string;
+  ready: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
+  ready: false,
   login: async () => {},
   logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-interface AuthProviderProps { children: ReactNode; }
+// Map various backend role strings to your Role enum
+function normalizeRole(raw?: string): Role | undefined {
+  if (!raw) return undefined;
+  const r = String(raw).toUpperCase();
+  if (r === 'ADMIN' || r === 'ROLE_ADMIN') return Role.ADMIN;
+  if (r === 'CUSTOMER' || r === 'ROLE_CUSTOMER' || r === 'USER' || r === 'ROLE_USER') return Role.CUSTOMER;
+  return undefined;
+}
 
-export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
-  const [role, setRole] = useState<Role>();
-  const [username, setUsername] = useState<string>();
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [role, setRole] = useState<Role | undefined>(undefined);
+  const [username, setUsername] = useState<string | undefined>(undefined);
+  const [ready, setReady] = useState(false);
 
   const fetchMe = async () => {
     try {
       const { data } = await http.get('/api/auth/me', { withCredentials: true });
-      setRole(data?.role as Role | undefined);
-      setUsername(data?.username as string | undefined);
+      setRole(normalizeRole(data?.role));
+      setUsername(data?.username);
     } catch {
       setRole(undefined);
       setUsername(undefined);
+    } finally {
+      setReady(true);
     }
   };
 
@@ -49,13 +53,9 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (u: string, p: string) => {
-    try {
-      await http.post('/api/auth/login', { username: u, password: p }, { withCredentials: true });
-      await fetchMe();
-    } catch (e: any) {
-      notifyError(e?.response?.data?.message || 'Login failed');
-      throw e;
-    }
+    await http.post('/api/auth/login', { username: u, password: p }, { withCredentials: true });
+    setReady(false);
+    await fetchMe();
   };
 
   const logout = async () => {
@@ -64,12 +64,10 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ role, username, login, logout }}>
+    <AuthContext.Provider value={{ role, username, ready, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-// ✅ Back-compat export so old imports don’t crash builds.
-// (We still prefer using the useAuth() hook everywhere.)
 export { AuthContext };

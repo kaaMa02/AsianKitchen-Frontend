@@ -1,50 +1,150 @@
-import * as React from 'react';
+import * as React from "react";
 import {
-  Box, Paper, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, MenuItem as MItem, Select, FormControl, InputLabel
-} from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { listAllUsers, createUser, updateUser, deleteUser } from '../../../services/users';
-import { Role, UserReadDTO, UserWriteDTO, UserProfileUpdateDTO } from '../../../types/api-types';
+  Paper,
+  Typography,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Select,
+  InputLabel,
+  Box,
+} from "@mui/material";
+import {
+  listAllUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+} from "../../../services/users";
+import {
+  UserReadDTO,
+  Role,
+  UserWriteDTO,
+  AdminUserUpdateDTO,
+} from "../../../types/api-types";
+import { notifyError, notifySuccess } from "../../../services/toast";
 
-const card = { p: 3, borderRadius: 2, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' } as const;
+const AK_DARK = "#0B2D24";
+const AK_GOLD = "#D1A01F";
+
+type FormState = {
+  id?: string;
+  username: string;
+  email: string;
+  role: Role;
+  password?: string;
+};
 
 export default function UsersAdminPage() {
   const [rows, setRows] = React.useState<UserReadDTO[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<UserReadDTO | null>(null);
+  const [form, setForm] = React.useState<FormState>({
+    username: "",
+    email: "",
+    role: Role.ADMIN,
+    password: "",
+  });
 
-  const [createForm, setCreateForm] = React.useState<UserWriteDTO>({ username: '', password: '', role: Role.CUSTOMER });
-  const [updateForm, setUpdateForm] = React.useState<UserProfileUpdateDTO>({ firstName: '', lastName: '', email: '', phoneNumber: '', address: undefined, password: undefined });
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await listAllUsers();
+      setRows(data);
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const load = React.useCallback(async () => setRows(await listAllUsers()), []);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    load();
+  }, []);
 
-  const onNew = () => { setEditing(null); setCreateForm({ username:'', password:'', role: Role.CUSTOMER }); setOpen(true); };
-  const onEdit = (u: UserReadDTO) => {
-    setEditing(u);
-    setUpdateForm({ firstName: u.firstName, lastName: u.lastName, email: u.email, phoneNumber: u.phoneNumber });
+  const onEdit = (u?: UserReadDTO) => {
+    if (u) {
+      setForm({
+        id: String(u.id),
+        username: u.username,
+        email: u.email,
+        role: u.role,
+      });
+    } else {
+      setForm({ username: "", email: "", role: Role.ADMIN, password: "" });
+    }
     setOpen(true);
   };
 
-  const onSave = async () => {
-    if (editing) await updateUser(String(editing.id), updateForm);
-    else await createUser(createForm);
-    setOpen(false); await load();
+  const save = async () => {
+    try {
+      if (form.id) {
+        const payload: AdminUserUpdateDTO = {
+          username: form.username.trim(),
+          email: form.email.trim(),
+          role: form.role,
+        };
+        await updateUser(form.id, payload as any);
+      } else {
+        const payload: UserWriteDTO = {
+          username: form.username.trim(),
+          email: form.email.trim(),
+          role: form.role,
+          password: String(form.password || "").trim(),
+        };
+        await createUser(payload);
+      }
+      notifySuccess("Saved");
+      setOpen(false);
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Save failed");
+    }
   };
 
   const onDelete = async (id: string) => {
-    if (!window.confirm('Delete this user?')) return;
-    await deleteUser(id); await load();
+    if (!window.confirm("Delete this user?")) return;
+    try {
+      await deleteUser(id);
+      notifySuccess("Deleted");
+      await load();
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Delete failed");
+    }
   };
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 800, color: '#0B2D24' }}>Users</Typography>
-      <Paper elevation={0} sx={card}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button onClick={onNew} variant="contained" sx={{ bgcolor: '#D1A01F', color: '#0B2D24', fontWeight: 800, '&:hover': { bgcolor: '#E2B437' } }}>
-            New User
+    <>
+      <Paper
+        elevation={0}
+        sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <Typography
+            variant="h6"
+            sx={{ color: AK_DARK, fontWeight: 800, flex: 1 }}
+          >
+            Users
+          </Typography>
+          <Button
+            onClick={() => onEdit()}
+            variant="contained"
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#E2B437" },
+            }}
+          >
+            Add
           </Button>
         </Box>
 
@@ -52,26 +152,39 @@ export default function UsersAdminPage() {
           <TableHead>
             <TableRow>
               <TableCell>Username</TableCell>
-              <TableCell>First</TableCell>
-              <TableCell>Last</TableCell>
               <TableCell>Email</TableCell>
-              <TableCell>Phone</TableCell>
               <TableCell>Role</TableCell>
-              <TableCell width={100} />
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map(u => (
+            {!loading && rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4}>No users</TableCell>
+              </TableRow>
+            )}
+            {rows.map((u) => (
               <TableRow key={String(u.id)}>
                 <TableCell>{u.username}</TableCell>
-                <TableCell>{u.firstName}</TableCell>
-                <TableCell>{u.lastName}</TableCell>
                 <TableCell>{u.email}</TableCell>
-                <TableCell>{u.phoneNumber}</TableCell>
                 <TableCell>{u.role}</TableCell>
                 <TableCell align="right">
-                  <Button size="small" onClick={() => onEdit(u)}>Edit</Button>
-                  <IconButton color="error" onClick={() => onDelete(String(u.id))}><DeleteIcon /></IconButton>
+                  <Button
+                    onClick={() => onEdit(u)}
+                    size="small"
+                    variant="outlined"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => onDelete(String(u.id))}
+                    size="small"
+                    variant="text"
+                    color="error"
+                    sx={{ ml: 1 }}
+                  >
+                    Delete
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -79,36 +192,67 @@ export default function UsersAdminPage() {
         </Table>
       </Paper>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editing ? 'Edit User' : 'New User'}</DialogTitle>
-        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
-          {editing ? (
-            <>
-              <TextField label="First name" value={updateForm.firstName ?? ''} onChange={e => setUpdateForm({ ...updateForm, firstName: e.target.value })} />
-              <TextField label="Last name" value={updateForm.lastName ?? ''} onChange={e => setUpdateForm({ ...updateForm, lastName: e.target.value })} />
-              <TextField label="Email" value={updateForm.email ?? ''} onChange={e => setUpdateForm({ ...updateForm, email: e.target.value })} />
-              <TextField label="Phone" value={updateForm.phoneNumber ?? ''} onChange={e => setUpdateForm({ ...updateForm, phoneNumber: e.target.value })} />
-              <TextField label="Password (optional)" type="password" value={updateForm.password ?? ''} onChange={e => setUpdateForm({ ...updateForm, password: e.target.value || undefined })} />
-            </>
-          ) : (
-            <>
-              <TextField label="Username" value={createForm.username} onChange={e => setCreateForm({ ...createForm, username: e.target.value })} />
-              <TextField label="Password" type="password" value={createForm.password} onChange={e => setCreateForm({ ...createForm, password: e.target.value })} />
-              <FormControl>
-                <InputLabel>Role</InputLabel>
-                <Select label="Role" value={createForm.role} onChange={e => setCreateForm({ ...createForm, role: e.target.value as any })}>
-                  <MItem value={Role.CUSTOMER}>CUSTOMER</MItem>
-                  <MItem value={Role.ADMIN}>ADMIN</MItem>
-                </Select>
-              </FormControl>
-            </>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{form.id ? "Edit User" : "Add User"}</DialogTitle>
+        <DialogContent sx={{ display: "grid", gap: 2, pt: 2 }}>
+          <TextField
+            label="Username"
+            value={form.username}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, username: e.target.value }))
+            }
+          />
+          <TextField
+            label="Email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+          {!form.id && (
+            <TextField
+              label="Password"
+              type="password"
+              value={form.password || ""}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, password: e.target.value }))
+              }
+            />
           )}
+          <Box>
+            <InputLabel id="role-label">Role</InputLabel>
+            <Select
+              labelId="role-label"
+              value={form.role}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, role: e.target.value as Role }))
+              }
+              fullWidth
+            >
+              <MenuItem value={Role.ADMIN}>ADMIN</MenuItem>
+              <MenuItem value={Role.CUSTOMER}>CUSTOMER</MenuItem>
+            </Select>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={onSave} variant="contained">Save</Button>
+          <Button
+            onClick={save}
+            variant="contained"
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#E2B437" },
+            }}
+          >
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

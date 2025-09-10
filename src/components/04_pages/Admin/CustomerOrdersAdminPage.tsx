@@ -1,23 +1,23 @@
 import * as React from 'react';
 import { Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody, Button, Chip } from '@mui/material';
-import { listAllBuffetOrders, updateBuffetOrderStatus } from '../../../services/buffetOrders';
 import { notifyError, notifySuccess } from '../../../services/toast';
-import { BuffetOrderReadDTO, OrderStatus } from '../../../types/api-types';
+import { CustomerOrderReadDTO, OrderStatus } from '../../../types/api-types';
+import { listAllCustomerOrders, updateCustomerOrderStatus } from '../../../services/customerOrders';
 
 const AK_DARK = '#0B2D24';
 const AK_GOLD = '#D1A01F';
 
-export default function BuffetOrdersAdminPage() {
-  const [rows, setRows] = React.useState<BuffetOrderReadDTO[]>([]);
+export default function CustomerOrdersAdminPage() {
+  const [rows, setRows] = React.useState<CustomerOrderReadDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listAllBuffetOrders();
+      const data = await listAllCustomerOrders();
       setRows(data);
     } catch (e:any) {
-      notifyError(e?.response?.data?.message || 'Failed to load buffet orders');
+      notifyError(e?.response?.data?.message || 'Failed to load orders');
     } finally {
       setLoading(false);
     }
@@ -27,7 +27,7 @@ export default function BuffetOrdersAdminPage() {
 
   const setStatus = async (id: string, s: OrderStatus) => {
     try {
-      await updateBuffetOrderStatus(id, s);
+      await updateCustomerOrderStatus(id, s);
       notifySuccess('Updated');
       await load();
     } catch (e:any) {
@@ -37,7 +37,7 @@ export default function BuffetOrdersAdminPage() {
 
   return (
     <Paper elevation={0} sx={{ p: 3, border: '1px solid #E2D9C2', bgcolor: '#f5efdf' }}>
-      <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>Buffet Orders</Typography>
+      <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>Menu Orders</Typography>
       <Table size="small">
         <TableHead>
           <TableRow>
