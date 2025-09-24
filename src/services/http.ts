@@ -62,17 +62,16 @@ export const bootstrapCsrf = ensureCsrf;
  * ALWAYS attach X-XSRF-TOKEN (after ensuring cookie exists).
  * We skip only the /api/csrf bootstrap request itself.
  */
-http.interceptors.request.use(
-  async (config: Cfg) => {
-    if (!config.__skipCsrf) {
-      await ensureCsrf(); // make sure cookie exists
-      const token = readCookie("XSRF-TOKEN");
-      if (token) (config.headers as any)["X-XSRF-TOKEN"] = token;
-    }
-    return config;
-  },
-  (err) => Promise.reject(err)
-);
+http.interceptors.request.use(async (config: Cfg) => {
+  const method = (config.method || 'get').toLowerCase();
+  const needsCsrf = !config.__skipCsrf && ['post','put','patch','delete'].includes(method);
+  if (needsCsrf) {
+    await ensureCsrf();
+    const token = readCookie("XSRF-TOKEN");
+    if (token) (config.headers as any)["X-XSRF-TOKEN"] = token;
+  }
+  return config;
+});
 
 /**
  * If server says 403 (token rotated/invalid), refresh CSRF cookie once and retry.
