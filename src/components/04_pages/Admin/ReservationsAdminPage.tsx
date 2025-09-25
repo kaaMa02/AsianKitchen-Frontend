@@ -42,29 +42,23 @@ export default function ReservationsAdminPage() {
   const [busyIds, setBusyIds] = React.useState<Record<string, boolean>>({});
   const { markSeen } = useAdminAlerts();
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await listReservations();
-      // newest first (assuming createdAt present; fallback to reservationDateTime)
-      const sorted = [...(data ?? [])].sort((a, b) =>
-        String(b.reservationDateTime).localeCompare(
-          String(a.reservationDateTime)
-        )
-      );
-      setRows(sorted);
-      await markSeen("reservations");
-    } catch (err) {
-      console.error("Failed to load reservations", err);
-      notifyError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [markSeen]);
-
   React.useEffect(() => {
-    load();
-  }, [load]);
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await listReservations();
+        setRows(data ?? []);
+      } catch (err) {
+        console.error("Failed to load reservations", err);
+        notifyError(getErrorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+      // fire-and-forget; do not surface errors
+      markSeen("reservations").catch(() => {});
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markSeen]);
 
   const mark = (id: string, v: boolean) =>
     setBusyIds((prev) => ({ ...prev, [id]: v }));
