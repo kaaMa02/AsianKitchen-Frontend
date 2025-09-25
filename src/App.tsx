@@ -30,9 +30,7 @@ const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
 
 export default function App() {
-  // Prime CSRF once (avoids a race on the first admin write)
   useEffect(() => {
-    bootstrapCsrf().catch(() => {});
   }, []);
 
   return (
