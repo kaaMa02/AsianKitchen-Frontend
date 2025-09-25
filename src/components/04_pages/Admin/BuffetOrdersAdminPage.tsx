@@ -7,8 +7,11 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Button,
   Chip,
+  Select,
+  MenuItem,
+  FormControl,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   listAllBuffetOrders,
@@ -19,24 +22,32 @@ import { BuffetOrderReadDTO, OrderStatus } from "../../../types/api-types";
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 
 const AK_DARK = "#0B2D24";
-const AK_GOLD = "#D1A01F";
+
+const STATUS_OPTIONS: OrderStatus[] = [
+  OrderStatus.CONFIRMED,
+  OrderStatus.PREPARING,
+  OrderStatus.ON_THE_WAY,
+  OrderStatus.DELIVERED,
+  OrderStatus.CANCELLED,
+];
 
 export default function BuffetOrdersAdminPage() {
   const [rows, setRows] = React.useState<BuffetOrderReadDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [savingId, setSavingId] = React.useState<string | null>(null);
   const { markSeen } = useAdminAlerts();
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listAllBuffetOrders(); // server returns paid orders (or all, per your API)
+      // backend returns all paid buffet orders
+      const data = await listAllBuffetOrders();
       setRows(data);
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to load buffet orders");
     } finally {
       setLoading(false);
     }
-    // don't await; avoid noisy toasts
     markSeen("buffet").catch(() => {});
   };
 
@@ -45,24 +56,28 @@ export default function BuffetOrdersAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setStatus = async (id: string, s: OrderStatus) => {
+  const onChangeStatus = async (id: string, next: OrderStatus) => {
     try {
-      await updateBuffetOrderStatus(id, s);
-      notifySuccess("Updated");
-      await load();
+      setSavingId(id);
+      await updateBuffetOrderStatus(id, next);
+      setRows((prev) =>
+        prev.map((o) => (String(o.id) === id ? { ...o, status: next } : o))
+      );
+      notifySuccess("Order status updated");
     } catch (e: any) {
-      notifyError(e?.response?.data?.message || "Failed to update");
+      notifyError(e?.response?.data?.message || "Failed to update status");
+      await load();
+    } finally {
+      setSavingId(null);
     }
   };
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
-    >
+    <Paper elevation={0} sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}>
       <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>
         Buffet Orders
       </Typography>
+
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -75,53 +90,51 @@ export default function BuffetOrdersAdminPage() {
             <TableCell align="right">Progress</TableCell>
           </TableRow>
         </TableHead>
+
         <TableBody>
           {!loading && rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={7}>No orders</TableCell>
             </TableRow>
           )}
-          {rows.map((o) => (
-            <TableRow key={String(o.id)}>
-              <TableCell>
-                {String(o.createdAt).replace("T", " ").slice(0, 16)}
-              </TableCell>
-              <TableCell>
-                {o.customerInfo?.firstName} {o.customerInfo?.lastName}
-              </TableCell>
-              <TableCell>{o.orderType}</TableCell>
-              <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
-              <TableCell>
-                <Chip label={o.status} size="small" />
-              </TableCell>
-              <TableCell>
-                <Chip label={o.paymentStatus || "N/A"} size="small" />
-              </TableCell>
-              <TableCell align="right">
-                {/* Replace with your status selector if implemented */}
-                <Button
-                  onClick={() => setStatus(String(o.id), OrderStatus.CONFIRMED)}
-                  size="small"
-                  variant="contained"
-                  sx={{
-                    bgcolor: AK_GOLD,
-                    color: AK_DARK,
-                    "&:hover": { bgcolor: "#E2B437" },
-                  }}
-                >
-                  Confirm
-                </Button>
-                <Button
-                  onClick={() => setStatus(String(o.id), OrderStatus.CANCELLED)}
-                  size="small"
-                  variant="outlined"
-                  sx={{ ml: 1 }}
-                >
-                  Cancel
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+
+          {rows.map((o) => {
+            const id = String(o.id);
+            return (
+              <TableRow key={id}>
+                <TableCell>{String(o.createdAt).replace("T", " ").slice(0, 16)}</TableCell>
+                <TableCell>
+                  {o.customerInfo?.firstName} {o.customerInfo?.lastName}
+                </TableCell>
+                <TableCell>{o.orderType}</TableCell>
+                <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
+                <TableCell>
+                  <Chip label={o.status} size="small" />
+                </TableCell>
+                <TableCell>
+                  <Chip label={o.paymentStatus || "N/A"} size="small" />
+                </TableCell>
+                <TableCell align="right">
+                  <FormControl size="small" sx={{ minWidth: 180 }}>
+                    <Select
+                      value={o.status as string}
+                      disabled={savingId === id}
+                      onChange={(e: SelectChangeEvent<string>) => {
+                        const next = e.target.value as OrderStatus;
+                        if (next && next !== o.status) onChangeStatus(id, next);
+                      }}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <MenuItem key={s} value={s} disabled={s === o.status}>
+                          {s}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </Paper>
