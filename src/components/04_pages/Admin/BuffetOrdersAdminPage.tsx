@@ -7,8 +7,12 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Button,
   Chip,
+  Box,
+  FormControl,
+  Select,
+  MenuItem,
+  CircularProgress,
 } from "@mui/material";
 import {
   listAllBuffetOrders,
@@ -19,17 +23,26 @@ import { BuffetOrderReadDTO, OrderStatus } from "../../../types/api-types";
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 
 const AK_DARK = "#0B2D24";
-const AK_GOLD = "#D1A01F";
+
+const STATUS_OPTIONS: OrderStatus[] = [
+  OrderStatus.CONFIRMED,
+  OrderStatus.PREPARING,
+  OrderStatus.ON_THE_WAY,
+  OrderStatus.DELIVERED,
+  OrderStatus.CANCELLED,
+];
 
 export default function BuffetOrdersAdminPage() {
   const [rows, setRows] = React.useState<BuffetOrderReadDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState<Record<string, boolean>>({});
   const { markSeen } = useAdminAlerts();
 
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listAllBuffetOrders(); // backend returns PAID + NEW
+      // Backend should return ALL buffet orders with paymentStatus=SUCCEEDED
+      const data = await listAllBuffetOrders();
       const sorted = [...data].sort((a, b) =>
         String(b.createdAt).localeCompare(String(a.createdAt))
       );
@@ -46,13 +59,18 @@ export default function BuffetOrdersAdminPage() {
     load();
   }, [load]);
 
-  const setStatus = async (id: string, s: OrderStatus) => {
+  const setStatus = async (id: string, next: OrderStatus) => {
+    setBusy((m) => ({ ...m, [id]: true }));
     try {
-      await updateBuffetOrderStatus(id, s);
-      notifySuccess("Updated");
-      await load();
+      await updateBuffetOrderStatus(id, next);
+      notifySuccess("Order updated");
+      setRows((prev) =>
+        prev.map((o) => (String(o.id) === id ? { ...o, status: next } : o))
+      );
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to update");
+    } finally {
+      setBusy((m) => ({ ...m, [id]: false }));
     }
   };
 
@@ -64,6 +82,7 @@ export default function BuffetOrdersAdminPage() {
       <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>
         Buffet Orders
       </Typography>
+
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -73,7 +92,7 @@ export default function BuffetOrdersAdminPage() {
             <TableCell>Total</TableCell>
             <TableCell>Status</TableCell>
             <TableCell>Payment</TableCell>
-            <TableCell align="right">Actions</TableCell>
+            <TableCell>Progress</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -82,46 +101,66 @@ export default function BuffetOrdersAdminPage() {
               <TableCell colSpan={7}>No orders</TableCell>
             </TableRow>
           )}
-          {rows.map((o) => (
-            <TableRow key={String(o.id)}>
-              <TableCell>
-                {String(o.createdAt).replace("T", " ").slice(0, 16)}
-              </TableCell>
-              <TableCell>
-                {o.customerInfo?.firstName} {o.customerInfo?.lastName}
-              </TableCell>
-              <TableCell>{o.orderType}</TableCell>
-              <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
-              <TableCell>
-                <Chip label={o.status} size="small" />
-              </TableCell>
-              <TableCell>
-                <Chip label={o.paymentStatus || "N/A"} size="small" />
-              </TableCell>
-              <TableCell align="right">
-                <Button
-                  onClick={() => setStatus(String(o.id), OrderStatus.CONFIRMED)}
-                  size="small"
-                  variant="contained"
-                  sx={{
-                    bgcolor: AK_GOLD,
-                    color: AK_DARK,
-                    "&:hover": { bgcolor: "#E2B437" },
-                  }}
-                >
-                  Confirm
-                </Button>
-                <Button
-                  onClick={() => setStatus(String(o.id), OrderStatus.CANCELLED)}
-                  size="small"
-                  variant="outlined"
-                  sx={{ ml: 1 }}
-                >
-                  Cancel
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+
+          {rows.map((o) => {
+            const id = String(o.id);
+            const isBusy = !!busy[id];
+            return (
+              <TableRow key={id}>
+                <TableCell>
+                  {String(o.createdAt).replace("T", " ").slice(0, 16)}
+                </TableCell>
+                <TableCell>
+                  {o.customerInfo?.firstName} {o.customerInfo?.lastName}
+                </TableCell>
+                <TableCell>{o.orderType}</TableCell>
+                <TableCell>
+                  CHF {Number(o.totalPrice || 0).toFixed(2)}
+                </TableCell>
+                <TableCell>
+                  <Chip label={o.status} size="small" />
+                </TableCell>
+                <TableCell>
+                  <Chip label={o.paymentStatus || "N/A"} size="small" />
+                </TableCell>
+
+                <TableCell>
+                  <Box sx={{ minWidth: 170 }}>
+                    <FormControl fullWidth size="small" disabled={isBusy}>
+                      <Select
+                        value={o.status}
+                        onChange={(e) =>
+                          setStatus(id, e.target.value as OrderStatus)
+                        }
+                        renderValue={(v) => String(v)}
+                      >
+                        {STATUS_OPTIONS.map((st) => (
+                          <MenuItem
+                            key={st}
+                            value={st}
+                            disabled={st === o.status}
+                          >
+                            {st}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  {isBusy && (
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        ml: 1,
+                        verticalAlign: "middle",
+                      }}
+                    >
+                      <CircularProgress size={18} />
+                    </Box>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </Paper>
