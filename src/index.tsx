@@ -8,7 +8,6 @@ import { RestaurantInfoProvider } from "./contexts/RestaurantInfoContext";
 import { CartProvider } from "./contexts/CartContext";
 import { ToastProvider } from "./services/toast";
 import { ensureCsrf } from "./services/http";
-import { StrictMode } from "react";
 
 ensureCsrf().catch(() => {});
 
@@ -16,20 +15,18 @@ const theme = createTheme();
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 root.render(
-  <StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter>
-        <AuthProvider>
-          <RestaurantInfoProvider>
-            <CartProvider>
-              <ToastProvider>
-                <App />
-              </ToastProvider>
-            </CartProvider>
-          </RestaurantInfoProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </ThemeProvider>
-  </StrictMode>
+  <ThemeProvider theme={theme}>
+    <CssBaseline />
+    <BrowserRouter>
+      <AuthProvider>
+        <RestaurantInfoProvider>
+          <CartProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </CartProvider>
+        </RestaurantInfoProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  </ThemeProvider>
 );
