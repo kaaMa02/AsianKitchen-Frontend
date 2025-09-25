@@ -10,7 +10,7 @@ const API_URL =
 /** -------- Axios instance -------- */
 const http = axios.create({
   baseURL: API_URL,
-  withCredentials: true,       // send AK_AUTH + XSRF-TOKEN cookies
+  withCredentials: true, // send AK_AUTH + XSRF-TOKEN cookies
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
   timeout: 12000,
@@ -24,7 +24,10 @@ function readCookie(name: string) {
 }
 
 /** We tag our own CSRF bootstrap request to avoid recursion in interceptors */
-type Cfg = InternalAxiosRequestConfig & { __skipCsrf?: boolean; _csrfRetry?: boolean };
+type Cfg = InternalAxiosRequestConfig & {
+  __skipCsrf?: boolean;
+  _csrfRetry?: boolean;
+};
 
 /** -------- CSRF bootstrap -------- */
 let csrfInitInFlight: Promise<void> | null = null;
@@ -58,7 +61,8 @@ export const bootstrapCsrf = ensureCsrf;
 /** -------- Interceptors -------- */
 http.interceptors.request.use(async (config: Cfg) => {
   const method = (config.method || "get").toLowerCase();
-  const needsCsrf = !config.__skipCsrf && ["post", "put", "patch", "delete"].includes(method);
+  const needsCsrf =
+    !config.__skipCsrf && ["post", "put", "patch", "delete"].includes(method);
   if (needsCsrf) {
     await ensureCsrf();
     const token = readCookie("XSRF-TOKEN");

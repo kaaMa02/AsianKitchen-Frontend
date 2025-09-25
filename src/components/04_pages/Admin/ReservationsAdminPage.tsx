@@ -10,10 +10,18 @@ import {
   Button,
   Chip,
 } from "@mui/material";
-import { listReservations, setReservationStatus, deleteReservation } from "../../../services/reservations";
+import {
+  listReservations,
+  setReservationStatus,
+  deleteReservation,
+} from "../../../services/reservations";
 import { notifyError, notifySuccess } from "../../../services/toast";
-import { ReservationReadDTO, ReservationStatus } from "../../../types/api-types";
+import {
+  ReservationReadDTO,
+  ReservationStatus,
+} from "../../../types/api-types";
 import { useEffect, useState } from "react";
+import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -32,6 +40,12 @@ export default function ReservationsAdminPage() {
   const [rows, setRows] = useState<ReservationReadDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
+  const { markSeen } = useAdminAlerts();
+
+  useEffect(() => {
+    // reset "new reservations" when page is opened
+    markSeen("reservations").catch(() => {});
+  }, [markSeen]);
 
   useEffect(() => {
     (async () => {
@@ -48,13 +62,16 @@ export default function ReservationsAdminPage() {
     })();
   }, []);
 
-  const mark = (id: string, v: boolean) => setBusyIds(prev => ({ ...prev, [id]: v }));
+  const mark = (id: string, v: boolean) =>
+    setBusyIds((prev) => ({ ...prev, [id]: v }));
 
   const onSetStatus = async (id: string, status: ReservationStatus) => {
     try {
       mark(id, true);
       const updated = await setReservationStatus(id, status);
-      setRows(prev => prev.map(r => String(r.id) === String(updated.id) ? updated : r));
+      setRows((prev) =>
+        prev.map((r) => (String(r.id) === String(updated.id) ? updated : r))
+      );
       notifySuccess(`Reservation ${status.toLowerCase()}!`);
     } catch (err) {
       console.error("Failed to update reservation status", err);
@@ -68,7 +85,7 @@ export default function ReservationsAdminPage() {
     try {
       mark(id, true);
       await deleteReservation(id);
-      setRows(prev => prev.filter(r => String(r.id) !== String(id)));
+      setRows((prev) => prev.filter((r) => String(r.id) !== String(id)));
       notifySuccess("Reservation deleted");
     } catch (err) {
       console.error("Failed to delete reservation", err);
@@ -79,7 +96,10 @@ export default function ReservationsAdminPage() {
   };
 
   return (
-    <Paper elevation={0} sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}>
+    <Paper
+      elevation={0}
+      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+    >
       <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>
         Reservations
       </Typography>
@@ -102,29 +122,45 @@ export default function ReservationsAdminPage() {
             </TableRow>
           )}
 
-          {rows.map(r => {
+          {rows.map((r) => {
             const id = String(r.id);
             const busy = !!busyIds[id];
             return (
               <TableRow key={id}>
-                <TableCell>{r.customerInfo?.firstName} {r.customerInfo?.lastName}</TableCell>
+                <TableCell>
+                  {r.customerInfo?.firstName} {r.customerInfo?.lastName}
+                </TableCell>
                 <TableCell>{r.customerInfo?.phone}</TableCell>
-                <TableCell>{String(r.reservationDateTime).replace("T", " ")}</TableCell>
+                <TableCell>
+                  {String(r.reservationDateTime).replace("T", " ")}
+                </TableCell>
                 <TableCell>{r.numberOfPeople}</TableCell>
-                <TableCell><Chip label={r.status} size="small" /></TableCell>
+                <TableCell>
+                  <Chip label={r.status} size="small" />
+                </TableCell>
                 <TableCell align="right">
-                  <Box sx={{ display: "inline-flex", gap: 1, flexWrap: "wrap" }}>
+                  <Box
+                    sx={{ display: "inline-flex", gap: 1, flexWrap: "wrap" }}
+                  >
                     <Button
-                      onClick={() => onSetStatus(id, ReservationStatus.CONFIRMED)}
+                      onClick={() =>
+                        onSetStatus(id, ReservationStatus.CONFIRMED)
+                      }
                       size="small"
                       disabled={busy}
                       variant="contained"
-                      sx={{ bgcolor: AK_GOLD, color: AK_DARK, "&:hover": { bgcolor: "#E2B437" } }}
+                      sx={{
+                        bgcolor: AK_GOLD,
+                        color: AK_DARK,
+                        "&:hover": { bgcolor: "#E2B437" },
+                      }}
                     >
                       Confirm
                     </Button>
                     <Button
-                      onClick={() => onSetStatus(id, ReservationStatus.REJECTED)}
+                      onClick={() =>
+                        onSetStatus(id, ReservationStatus.REJECTED)
+                      }
                       size="small"
                       disabled={busy}
                       variant="outlined"

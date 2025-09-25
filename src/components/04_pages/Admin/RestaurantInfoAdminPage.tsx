@@ -34,6 +34,7 @@ export default function RestaurantInfoAdminPage() {
         setId(String(row.id));
         setForm({
           name: row.name || "",
+          aboutText: row.aboutText || "",
           phone: row.phone || "",
           address: {
             street: row.address?.street || "",
