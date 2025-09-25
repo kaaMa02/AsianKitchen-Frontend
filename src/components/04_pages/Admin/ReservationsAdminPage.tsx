@@ -100,6 +100,7 @@ export default function ReservationsAdminPage() {
             return (
               <TableRow key={id}>
                 <TableCell>{r.customerInfo?.firstName} {r.customerInfo?.lastName}</TableCell>
+                <TableCell>{r.customerInfo?.phone}</TableCell>
                 <TableCell>{String(r.reservationDateTime).replace('T', ' ')}</TableCell>
                 <TableCell>{r.numberOfPeople}</TableCell>
                 <TableCell>
