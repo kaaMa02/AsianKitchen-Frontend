@@ -40,8 +40,7 @@ export async function ensureCsrf(force = false): Promise<void> {
     csrfInitInFlight = http
       .get("/api/csrf", {
         withCredentials: true,
-        // sentinel to skip the interceptor logic
-        headers: { "X-REQUEST-CSRF-BOOT": "1" },
+        headers: { "X-REQUEST-CSRF-BOOT": "1" }, // preflight-safe
         __skipCsrf: true as any,
       } as any)
       .then(() => {
@@ -57,11 +56,6 @@ export async function ensureCsrf(force = false): Promise<void> {
 export const bootstrapCsrf = ensureCsrf;
 
 /** -------- Interceptors -------- */
-
-/**
- * ALWAYS attach X-XSRF-TOKEN (after ensuring cookie exists).
- * We skip only the /api/csrf bootstrap request itself.
- */
 http.interceptors.request.use(async (config: Cfg) => {
   const method = (config.method || 'get').toLowerCase();
   const needsCsrf = !config.__skipCsrf && ['post','put','patch','delete'].includes(method);
@@ -73,9 +67,6 @@ http.interceptors.request.use(async (config: Cfg) => {
   return config;
 });
 
-/**
- * If server says 403 (token rotated/invalid), refresh CSRF cookie once and retry.
- */
 http.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {

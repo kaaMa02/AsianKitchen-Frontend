@@ -1,10 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Box } from "@mui/material";
 
 import Navbar from "./components/02_molecules/NavBar";
 import Footer from "./components/03_organisms/Home/Footer";
-
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import PageLoader from "./components/common/PageLoader";
 import ScrollToHash from "./components/common/ScrollToHash";
@@ -24,15 +23,21 @@ import AdminRoute from "./routes/AdminRoute";
 import AdminDashboardPage from "./components/04_pages/Admin/AdminDashboardPage";
 import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage";
 
+import { bootstrapCsrf } from "./services/http";
+
 // lazy public
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
 
 export default function App() {
+  // Prime CSRF once (avoids a race on the first admin write)
+  useEffect(() => {
+    bootstrapCsrf().catch(() => {});
+  }, []);
+
   return (
     <ErrorBoundary fallback={<PageLoader />}>
       <Navbar />
-      {/* spacer for fixed navbar */}
       <Box sx={{ height: { xs: 56, md: 64 } }} />
 
       <Suspense fallback={<PageLoader />}>
