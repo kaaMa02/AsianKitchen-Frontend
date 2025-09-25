@@ -11,7 +11,7 @@ import {
   IconButton,
   Typography,
   Button,
-  Chip,
+  Badge,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -23,7 +23,7 @@ import StoreIcon from "@mui/icons-material/Store";
 import PeopleIcon from "@mui/icons-material/People";
 import LunchDiningIcon from "@mui/icons-material/LunchDining";
 import { useAuth } from "../../../../contexts/AuthContext";
-import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext"; // <<< use counts
+import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -35,38 +35,50 @@ export default function AdminLayout() {
   const { alerts } = useAdminAlerts();
 
   const links = [
-    { to: "/admin", label: "Dashboard", icon: <DashboardIcon /> },
+    { to: "/admin", label: "Dashboard", icon: <DashboardIcon />, badge: 0 },
     {
       to: "/admin/reservations",
       label: "Reservations",
       icon: <EventSeatIcon />,
-      count: alerts.reservationsRequested,
+      badge: alerts.reservationsRequested,
     },
     {
       to: "/admin/orders",
       label: "Menu Orders",
       icon: <ReceiptLongIcon />,
-      count: alerts.ordersNew,
+      badge: alerts.ordersNew,
     },
     {
       to: "/admin/buffet-orders",
       label: "Buffet Orders",
       icon: <RamenDiningIcon />,
-      count: alerts.buffetOrdersNew,
+      badge: alerts.buffetOrdersNew,
     },
-    { to: "/admin/food-items", label: "Food Items", icon: <SetMealIcon /> },
-    { to: "/admin/menu-items", label: "Menu Items", icon: <LunchDiningIcon /> },
+    {
+      to: "/admin/food-items",
+      label: "Food Items",
+      icon: <SetMealIcon />,
+      badge: 0,
+    },
+    {
+      to: "/admin/menu-items",
+      label: "Menu Items",
+      icon: <LunchDiningIcon />,
+      badge: 0,
+    },
     {
       to: "/admin/buffet-items",
       label: "Buffet Items",
       icon: <LunchDiningIcon />,
+      badge: 0,
     },
     {
       to: "/admin/restaurant-info",
       label: "Restaurant Info",
       icon: <StoreIcon />,
+      badge: 0,
     },
-    { to: "/admin/users", label: "Users", icon: <PeopleIcon /> },
+    { to: "/admin/users", label: "Users", icon: <PeopleIcon />, badge: 0 },
   ];
 
   const drawer = (
@@ -75,6 +87,15 @@ export default function AdminLayout() {
       <List>
         {links.map((l) => {
           const active = loc.pathname === l.to;
+          const label = (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ mr: 1.25 }}>{l.icon}</Box>
+              <Box component="span" sx={{ flex: 1 }}>
+                {l.label}
+              </Box>
+              {l.badge > 0 && <Badge color="error" badgeContent={l.badge} />}
+            </Box>
+          );
           return (
             <ListItemButton
               key={l.to}
@@ -86,26 +107,10 @@ export default function AdminLayout() {
                   ? `3px solid ${AK_GOLD}`
                   : "3px solid transparent",
                 bgcolor: active ? "rgba(209,160,31,0.08)" : "transparent",
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
               }}
             >
-              <Box sx={{ mr: 1.25 }}>{l.icon}</Box>
               <ListItemText
-                primary={
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <span>{l.label}</span>
-                    {typeof l.count === "number" && l.count > 0 && (
-                      <Chip
-                        size="small"
-                        color="error"
-                        label={l.count}
-                        sx={{ height: 20 }}
-                      />
-                    )}
-                  </Box>
-                }
+                primary={label}
                 primaryTypographyProps={{ sx: { color: AK_DARK } }}
               />
             </ListItemButton>
@@ -123,18 +128,20 @@ export default function AdminLayout() {
         sx={{ bgcolor: AK_DARK, color: "#EFE7CE" }}
       >
         <Toolbar sx={{ color: "inherit" }}>
-          {/* Keep the burger for mobile; the permanent left column still shows on desktop */}
+          {/* Hide burger on desktop; show on mobile */}
           <IconButton
             color="inherit"
             edge="start"
             onClick={() => setOpen(true)}
-            sx={{ mr: 1, display: { md: "none" } }}
+            sx={{ mr: 1, display: { xs: "inline-flex", md: "none" } }}
           >
             <MenuIcon />
           </IconButton>
+
           <Typography sx={{ flex: 1, fontWeight: 800, color: "inherit" }}>
             Asian Kitchen · Admin
           </Typography>
+
           <Typography sx={{ mr: 2, opacity: 0.9, color: "inherit" }}>
             {username}
           </Typography>
@@ -161,7 +168,7 @@ export default function AdminLayout() {
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { md: "260px 1fr" },
+          gridTemplateColumns: "260px 1fr",
           alignItems: "flex-start",
         }}
       >

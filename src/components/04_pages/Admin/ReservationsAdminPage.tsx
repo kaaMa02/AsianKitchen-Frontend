@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   Box,
   Paper,
@@ -20,7 +21,6 @@ import {
   ReservationReadDTO,
   ReservationStatus,
 } from "../../../types/api-types";
-import { useEffect, useState } from "react";
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 
 const AK_DARK = "#0B2D24";
@@ -37,30 +37,34 @@ function getErrorMessage(err: unknown): string {
 }
 
 export default function ReservationsAdminPage() {
-  const [rows, setRows] = useState<ReservationReadDTO[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
+  const [rows, setRows] = React.useState<ReservationReadDTO[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [busyIds, setBusyIds] = React.useState<Record<string, boolean>>({});
   const { markSeen } = useAdminAlerts();
 
-  useEffect(() => {
-    // reset "new reservations" when page is opened
-    markSeen("reservations").catch(() => {});
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await listReservations();
+      // newest first (assuming createdAt present; fallback to reservationDateTime)
+      const sorted = [...(data ?? [])].sort((a, b) =>
+        String(b.reservationDateTime).localeCompare(
+          String(a.reservationDateTime)
+        )
+      );
+      setRows(sorted);
+      await markSeen("reservations");
+    } catch (err) {
+      console.error("Failed to load reservations", err);
+      notifyError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, [markSeen]);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await listReservations();
-        setRows(data ?? []);
-      } catch (err) {
-        console.error("Failed to load reservations", err);
-        notifyError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  React.useEffect(() => {
+    load();
+  }, [load]);
 
   const mark = (id: string, v: boolean) =>
     setBusyIds((prev) => ({ ...prev, [id]: v }));
