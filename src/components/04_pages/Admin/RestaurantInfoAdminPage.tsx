@@ -19,6 +19,7 @@ export default function RestaurantInfoAdminPage() {
   const [id, setId] = React.useState<string | undefined>(undefined);
   const [form, setForm] = React.useState<RestaurantInfoWriteDTO>({
     name: "",
+    aboutText: "",
     phone: "",
     address: { street: "", streetNo: "", plz: "", city: "" },
     openingHours: "",
@@ -86,6 +87,14 @@ export default function RestaurantInfoAdminPage() {
           value={form.name}
           onChange={(e: InputEvt) =>
             setForm((f) => ({ ...f, name: e.target.value }))
+          }
+        />
+
+        <TextField
+          label="About Us"
+          value={form.aboutText}
+          onChange={(e: InputEvt) =>
+            setForm((f) => ({ ...f, aboutText: e.target.value }))
           }
         />
 
