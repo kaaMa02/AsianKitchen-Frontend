@@ -1,34 +1,32 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
+/** -------- Base URL -------- */
 const API_URL =
   (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "") ||
   (process.env.NODE_ENV === "production"
     ? "https://api.asian-kitchen.online"
     : "http://localhost:8080");
 
+/** -------- Axios instance -------- */
 const http = axios.create({
   baseURL: API_URL,
-  withCredentials: true, // send AK_AUTH + XSRF-TOKEN cookies
+  withCredentials: true,       // send AK_AUTH + XSRF-TOKEN cookies
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
   timeout: 12000,
 } as any);
 
-const cookieReCache = new Map<string, RegExp>();
-
+/** -------- Cookie utils (RegExp.exec to satisfy Sonar) -------- */
 function readCookie(name: string) {
-  let re = cookieReCache.get(name);
-  if (!re) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    re = new RegExp(`(?:^|;\\s*)${escaped}=([^;]*)`);
-    cookieReCache.set(name, re);
-  }
+  const re = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`);
   const m = re.exec(document.cookie);
-  return m ? decodeURIComponent(m[1]) : "";
+  return decodeURIComponent(m?.[1] ?? "");
 }
 
+/** We tag our own CSRF bootstrap request to avoid recursion in interceptors */
 type Cfg = InternalAxiosRequestConfig & { __skipCsrf?: boolean; _csrfRetry?: boolean };
 
+/** -------- CSRF bootstrap -------- */
 let csrfInitInFlight: Promise<void> | null = null;
 
 export async function ensureCsrf(force = false): Promise<void> {
@@ -57,12 +55,10 @@ export async function ensureCsrf(force = false): Promise<void> {
 
 export const bootstrapCsrf = ensureCsrf;
 
+/** -------- Interceptors -------- */
 http.interceptors.request.use(async (config: Cfg) => {
-  const method = (config.method || 'get').toLowerCase();
-  const needsCsrf = !config.__skipCsrf && ['post','put','patch','delete'].includes(method);
-
-  // We only need the token for PUBLIC endpoints. Admin endpoints ignore CSRF server-side,
-  // but sending the header is harmless if the cookie exists.
+  const method = (config.method || "get").toLowerCase();
+  const needsCsrf = !config.__skipCsrf && ["post", "put", "patch", "delete"].includes(method);
   if (needsCsrf) {
     await ensureCsrf();
     const token = readCookie("XSRF-TOKEN");
@@ -75,9 +71,8 @@ http.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const status = error.response?.status;
-    const cfg = error.config as Cfg;
+    const cfg = error.config as Cfg | undefined;
 
-    // If CSRF was rotated server-side, refresh once and retry
     if (status === 403 && cfg && !cfg._csrfRetry) {
       cfg._csrfRetry = true;
       await ensureCsrf(true);

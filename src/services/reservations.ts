@@ -1,32 +1,29 @@
-import http from './http';
-import { ensureCsrf } from './http';
+import http, { ensureCsrf } from "./http";
 import type {
   ReservationReadDTO,
   ReservationStatus,
-  ReservationWriteDTO
-} from '../types/api-types';
+  ReservationWriteDTO,
+} from "../types/api-types";
 
 // Public create
 export async function createReservation(dto: ReservationWriteDTO): Promise<ReservationReadDTO> {
   await ensureCsrf();
-  const { data } = await http.post<ReservationReadDTO>('/api/reservations', dto);
+  const { data } = await http.post<ReservationReadDTO>("/api/reservations", dto);
   return data;
 }
 
-// Public: list by user
 export async function listReservationsByUser(userId: string): Promise<ReservationReadDTO[]> {
-  const { data } = await http.get<ReservationReadDTO[]>('/api/reservations', { params: { userId } });
+  const { data } = await http.get<ReservationReadDTO[]>("/api/reservations", { params: { userId } });
   return data;
 }
 
-// Public: track by id+email
 export async function trackReservation(id: string, email: string): Promise<ReservationReadDTO> {
   const { data } = await http.get<ReservationReadDTO>(`/api/reservations/${id}/track`, { params: { email } });
   return data;
 }
 
 export async function listReservations(): Promise<ReservationReadDTO[]> {
-  const { data } = await http.get<ReservationReadDTO[]>('/api/admin/reservations');
+  const { data } = await http.get<ReservationReadDTO[]>("/api/admin/reservations");
   return data;
 }
 
