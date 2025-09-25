@@ -24,6 +24,7 @@ import AdminDashboardPage from "./components/04_pages/Admin/AdminDashboardPage";
 import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage";
 
 import { bootstrapCsrf } from "./services/http";
+import { AdminAlertsProvider } from "./contexts/AdminAlertsContext";  // <<< add
 
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
@@ -52,7 +53,10 @@ export default function App() {
             path="/admin"
             element={
               <AdminRoute>
-                <AdminLayout />
+                {/* Provide alerts only inside the admin area */}
+                <AdminAlertsProvider>
+                  <AdminLayout />
+                </AdminAlertsProvider>
               </AdminRoute>
             }
           >
