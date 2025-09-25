@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Box } from "@mui/material";
 
@@ -23,16 +23,11 @@ import AdminRoute from "./routes/AdminRoute";
 import AdminDashboardPage from "./components/04_pages/Admin/AdminDashboardPage";
 import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage";
 
-import { bootstrapCsrf } from "./services/http";
-
 // lazy public
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
 
 export default function App() {
-  useEffect(() => {
-  }, []);
-
   return (
     <ErrorBoundary fallback={<PageLoader />}>
       <Navbar />
