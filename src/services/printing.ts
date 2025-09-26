@@ -1,101 +1,219 @@
-import type { CustomerOrderReadDTO, BuffetOrderReadDTO } from "../types/api-types";
+// src/services/printing.ts
+import type {
+  BuffetOrderReadDTO,
+  CustomerOrderReadDTO,
+  OrderItemReadDTO,
+} from "../types/api-types";
 
-// ── ESC/POS helpers ───────────────────────────────────────────────────────────
-function bytes(...arrs: (Uint8Array | number[])[]) {
-  const flat = arrs.flatMap((a) => (a instanceof Uint8Array ? Array.from(a) : a));
-  return new Uint8Array(flat);
+/** A minimal ESC/POS builder */
+class EscPos {
+  // Must be mutable to build the byte array efficiently (push).
+  // NOSONAR (S2933): property is intentionally mutable; we're mutating contents, not reassigning the reference.
+  private out: number[] = [];
+
+  private readonly ESC = 0x1b;
+  private readonly GS = 0x1d;
+
+  private push(...n: number[]) {
+    this.out.push(...n);
+    return this;
+  }
+
+  init() {
+    return this.push(this.ESC, 0x40);
+  } // Initialize
+  alignLeft() {
+    return this.push(this.ESC, 0x61, 0);
+  }
+  alignCenter() {
+    return this.push(this.ESC, 0x61, 1);
+  }
+  alignRight() {
+    return this.push(this.ESC, 0x61, 2);
+  }
+  bold(on: boolean) {
+    return this.push(this.ESC, 0x45, on ? 1 : 0);
+  }
+  // Double width & height (ESC/POS 0x1D 0x21 n)
+  dbl(on: boolean) {
+    return this.push(this.GS, 0x21, on ? 0x11 : 0x00);
+  }
+  lf(n = 1) {
+    while (n-- > 0) this.push(0x0a);
+    return this;
+  }
+  // Partial cut
+  cut() {
+    return this.push(this.GS, 0x56, 0x41, 30);
+  }
+
+  text(s: string) {
+    const bytes = new TextEncoder().encode(s);
+    // Use forEach to avoid for..of (keeps ES5 friendly & quiets Sonar S4138).
+    bytes.forEach((b) => this.out.push(b));
+    return this;
+  }
+
+  rule(w = 32) {
+    // hyphen x w, then LF
+    this.text(new Array(w + 1).join("-")).lf();
+    return this;
+  }
+
+  toBytes(): Uint8Array {
+    return new Uint8Array(this.out);
+  }
 }
-function cmd(...n: number[]) { return new Uint8Array(n); }
-function txt(s: string) { return new TextEncoder().encode(s); }
 
-function init()       { return cmd(0x1B, 0x40); }
-function centerOn()   { return cmd(0x1B, 0x61, 0x01); }
-function centerOff()  { return cmd(0x1B, 0x61, 0x00); }
-function boldOn()     { return cmd(0x1B, 0x45, 0x01); }
-function boldOff()    { return cmd(0x1B, 0x45, 0x00); }
-function dblHOn()     { return cmd(0x1D, 0x21, 0x01); }
-function resetSize()  { return cmd(0x1D, 0x21, 0x00); }
-function lf(n=1)      { return new Uint8Array(Array(n).fill(0x0A)); }
-function cut()        { return cmd(0x1D, 0x56, 0x41, 0x10); } // partial cut
+/** Convert bytes to base64 without for..of */
+function toBase64(u8: Uint8Array) {
+  let bin = "";
+  u8.forEach((b) => {
+    bin += String.fromCharCode(b);
+  }); // S4138 satisfied
+  return btoa(bin);
+}
 
-// QR (model 2, size 4, error M)
-function qr(data: string) {
-  const enc = new TextEncoder().encode(data);
-  const pL = (enc.length + 3) & 0xff;
-  const pH = ((enc.length + 3) >> 8) & 0xff;
-  return bytes(
-    cmd(0x1D,0x28,0x6B, 0x04,0x00, 0x31,0x41,0x32,0x00),
-    cmd(0x1D,0x28,0x6B, 0x03,0x00, 0x31,0x43,0x04),
-    cmd(0x1D,0x28,0x6B, 0x03,0x00, 0x31,0x45,0x31),
-    cmd(0x1D,0x28,0x6B, pL,pH, 0x31,0x50,0x30), enc,
-    cmd(0x1D,0x28,0x6B, 0x03,0x00, 0x31,0x51,0x30)
+/** Launch RawBT (Android) with ESC/POS payload */
+export function printWithRawBT(bytes: Uint8Array) {
+  const b64 = toBase64(bytes);
+  const url = `rawbt://print?format=escpos&data=${encodeURIComponent(b64)}`;
+  window.location.href = url;
+}
+
+/** Helpers */
+function fmtMoney(n?: string | number) {
+  const v = typeof n === "string" ? Number(n) : n ?? 0;
+  return `CHF ${v.toFixed(2)}`;
+}
+
+// A safe item shape our receipts understand (no `any` intersections)
+type AnyOrderItem = OrderItemReadDTO & {
+  unitPrice?: number | string;
+  menuItemName?: string;
+  name?: string;
+};
+
+function itemName(oi?: AnyOrderItem | null): string {
+  if (!oi) return "Item";
+  return (
+    oi.menuItemName || oi.name || (oi.menuItemId ? `#${oi.menuItemId}` : "Item")
   );
 }
 
-function line48(s: string) {
-  const line = s.normalize("NFKD").replace(/\r?\n/g, " ");
-  return line.length > 48 ? line.slice(0,48) : line;
+function lineItem(oi: AnyOrderItem): string {
+  const nm = itemName(oi);
+  const qty = oi.quantity ?? 1;
+  const unit =
+    typeof oi.unitPrice !== "undefined" ? Number(oi.unitPrice) : undefined;
+  const total = typeof unit !== "undefined" ? unit * qty : undefined;
+
+  return typeof total !== "undefined"
+    ? `${nm}  x${qty}   ${fmtMoney(total)}`
+    : `${nm}  x${qty}`;
 }
 
-function itemLine48(left: string, right: string) {
-  const L = line48(left);
-  const space = 48 - L.length - right.length;
-  return `${L}${" ".repeat(Math.max(1, space))}${right}`;
+/** Customer order receipt */
+export function buildCustomerReceipt(order: CustomerOrderReadDTO) {
+  const p = new EscPos().init();
+
+  p.alignCenter().bold(true).dbl(true).text("ASIAN KITCHEN").lf();
+  p.bold(false).dbl(false).text("Order Receipt").lf().lf();
+
+  p.alignLeft()
+    .text(`Order ID: ${order.id}`)
+    .lf()
+    .text(`Placed  : ${String(order.createdAt).replace("T", " ").slice(0, 16)}`)
+    .lf()
+    .text(`Type    : ${order.orderType}`)
+    .lf()
+    .text(`Status  : ${order.status}`)
+    .lf()
+    .text(`Payment : ${order.paymentStatus ?? "N/A"}`)
+    .lf()
+    .rule();
+
+  const items: AnyOrderItem[] = Array.isArray(order.orderItems)
+    ? (order.orderItems as AnyOrderItem[])
+    : [];
+  p.text("Items").lf();
+  items.forEach((oi) => p.text("• " + lineItem(oi)).lf());
+  p.rule();
+
+  p.alignRight()
+    .bold(true)
+    .text(`Total: ${fmtMoney(order.totalPrice)}`)
+    .lf();
+  p.alignLeft()
+    .bold(false)
+    .lf()
+    .text(
+      `Name : ${order.customerInfo?.firstName ?? ""} ${
+        order.customerInfo?.lastName ?? ""
+      }`
+    )
+    .lf()
+    .text(`Phone: ${order.customerInfo?.phone ?? ""}`)
+    .lf();
+
+  p.lf().alignCenter().text("Thank you!").lf().cut();
+  return p.toBytes();
 }
 
-function itemLines(order: any) {
-  const items: any[] = Array.isArray(order.orderItems) ? order.orderItems : [];
-  return items.map((oi) => {
-    const name = (oi.menuItemName ?? `#${oi.menuItemId ?? ""}`).toString();
-    const qty  = Number(oi.quantity ?? 1);
-    const unit = typeof oi.unitPrice !== "undefined" ? Number(oi.unitPrice) : undefined;
-    const right = typeof unit !== "undefined" ? `CHF ${(unit * qty).toFixed(2)}` : "";
-    return itemLine48(`${qty} x ${name}`, right);
+/** Buffet order receipt */
+export function buildBuffetReceipt(order: BuffetOrderReadDTO) {
+  const p = new EscPos().init();
+
+  p.alignCenter().bold(true).dbl(true).text("ASIAN KITCHEN").lf();
+  p.bold(false).dbl(false).text("Buffet Order").lf().lf();
+
+  p.alignLeft()
+    .text(`Order ID: ${order.id}`)
+    .lf()
+    .text(`Placed  : ${String(order.createdAt).replace("T", " ").slice(0, 16)}`)
+    .lf()
+    .text(`Type    : ${order.orderType}`)
+    .lf()
+    .text(`Status  : ${order.status}`)
+    .lf()
+    .text(`Payment : ${order.paymentStatus ?? "N/A"}`)
+    .lf()
+    .rule();
+
+  const items: Array<{ buffetItemId?: string; quantity?: number }> =
+    Array.isArray(order.orderItems) ? (order.orderItems as any[]) : [];
+
+  p.text("Guests / Items").lf();
+  items.forEach((oi) => {
+    const idTxt = oi.buffetItemId ? `#${oi.buffetItemId}` : "Item";
+    const qty = oi.quantity ?? 1;
+    p.text(`• ${idTxt}  x${qty}`).lf();
   });
+  p.rule();
+
+  p.alignRight()
+    .bold(true)
+    .text(`Total: ${fmtMoney(order.totalPrice)}`)
+    .lf();
+  p.alignLeft()
+    .bold(false)
+    .lf()
+    .text(
+      `Name : ${order.customerInfo?.firstName ?? ""} ${
+        order.customerInfo?.lastName ?? ""
+      }`
+    )
+    .lf()
+    .text(`Phone: ${order.customerInfo?.phone ?? ""}`)
+    .lf();
+
+  p.lf().alignCenter().text("Enjoy your meal!").lf().cut();
+  return p.toBytes();
 }
 
-export type PrintKind = "MENU" | "BUFFET";
-
-function buildReceipt(order: CustomerOrderReadDTO | BuffetOrderReadDTO, kind: PrintKind) {
-  const cust = order.customerInfo || ({} as any);
-  const addr = cust.address || ({} as any);
-
-  const trackUrl =
-    kind === "MENU"
-      ? `https://asian-kitchen.online/track?orderId=${order.id}&email=${encodeURIComponent(cust.email || "")}`
-      : `https://asian-kitchen.online/track-buffet?orderId=${order.id}&email=${encodeURIComponent(cust.email || "")}`;
-
-  return bytes(
-    init(),
-    centerOn(), boldOn(), dblHOn(), txt("ASIAN KITCHEN\n"), resetSize(), boldOff(), centerOff(),
-    boldOn(), txt(kind === "MENU" ? "Customer Order\n" : "Buffet Order\n"), boldOff(),
-    txt(`Order: ${order.id}\n`),
-    txt(`Placed: ${String(order.createdAt).replace("T"," ").slice(0,16)}\n`),
-    txt(`Type: ${order.orderType}\n\n`),
-
-    txt(`${cust.firstName ?? ""} ${cust.lastName ?? ""}\n`),
-    txt(`${cust.phone ?? ""}\n`),
-    txt(`${[addr.street, addr.streetNo].filter(Boolean).join(" ")}\n`),
-    txt(`${[addr.plz, addr.city].filter(Boolean).join(" ")}\n`),
-
-    txt("-".repeat(48) + "\n"),
-    ...itemLines(order).map((s) => txt(s + "\n")),
-    txt("-".repeat(48) + "\n"),
-    txt(`TOTAL: CHF ${Number(order.totalPrice || 0).toFixed(2)}\n\n`),
-
-    centerOn(), qr(trackUrl), lf(), centerOff(),
-    txt("Track your order:\n"),
-    txt(trackUrl + "\n\n"),
-    txt("Thank you!\n"),
-    lf(4),
-    cut()
-  );
+export function printCustomerOrder(order: CustomerOrderReadDTO) {
+  printWithRawBT(buildCustomerReceipt(order));
 }
-
-export function printOrderViaRawBT(order: CustomerOrderReadDTO | BuffetOrderReadDTO, kind: PrintKind) {
-  const data = buildReceipt(order, kind);
-  let bin = ""; data.forEach((b) => (bin += String.fromCharCode(b)));
-  const b64 = btoa(bin);
-  // Hands off to the RawBT app:
-  window.location.href = `rawbt:${b64}`;
+export function printBuffetOrder(order: BuffetOrderReadDTO) {
+  printWithRawBT(buildBuffetReceipt(order));
 }
