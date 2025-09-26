@@ -140,31 +140,35 @@ export default function ReservationsAdminPage() {
                   <Box
                     sx={{ display: "inline-flex", gap: 1, flexWrap: "wrap" }}
                   >
-                    <Button
-                      onClick={() =>
-                        onSetStatus(id, ReservationStatus.CONFIRMED)
-                      }
-                      size="small"
-                      disabled={busy}
-                      variant="contained"
-                      sx={{
-                        bgcolor: AK_GOLD,
-                        color: AK_DARK,
-                        "&:hover": { bgcolor: "#E2B437" },
-                      }}
-                    >
-                      Confirm
-                    </Button>
-                    <Button
-                      onClick={() =>
-                        onSetStatus(id, ReservationStatus.REJECTED)
-                      }
-                      size="small"
-                      disabled={busy}
-                      variant="outlined"
-                    >
-                      Reject
-                    </Button>
+                    {r.status === ReservationStatus.REQUESTED ? (
+                      <>
+                        <Button
+                          onClick={() =>
+                            onSetStatus(id, ReservationStatus.CONFIRMED)
+                          }
+                          size="small"
+                          disabled={busy}
+                          variant="contained"
+                          sx={{
+                            bgcolor: AK_GOLD,
+                            color: AK_DARK,
+                            "&:hover": { bgcolor: "#E2B437" },
+                          }}
+                        >
+                          Confirm
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            onSetStatus(id, ReservationStatus.REJECTED)
+                          }
+                          size="small"
+                          disabled={busy}
+                          variant="outlined"
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    ) : null}
                     <Button
                       onClick={() => onDelete(id)}
                       size="small"
