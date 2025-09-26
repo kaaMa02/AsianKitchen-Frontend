@@ -24,7 +24,7 @@ import AdminDashboardPage from "./components/04_pages/Admin/AdminDashboardPage";
 import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage";
 
 import { bootstrapCsrf } from "./services/http";
-import { AdminAlertsProvider } from "./contexts/AdminAlertsContext";  // <<< add
+import { AdminAlertsProvider } from "./contexts/AdminAlertsContext";
 
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
@@ -48,12 +48,11 @@ export default function App() {
           <Route path="/reservation" element={<ReservationPage />} />
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Admin (guarded) */}
+          {/* Admin */}
           <Route
             path="/admin"
             element={
               <AdminRoute>
-                {/* Provide alerts only inside the admin area */}
                 <AdminAlertsProvider>
                   <AdminLayout />
                 </AdminAlertsProvider>
@@ -67,7 +66,10 @@ export default function App() {
             <Route path="food-items" element={<FoodItemsAdminPage />} />
             <Route path="menu-items" element={<MenuItemsAdminPage />} />
             <Route path="buffet-items" element={<BuffetItemsAdminPage />} />
-            <Route path="restaurant-info" element={<RestaurantInfoAdminPage />} />
+            <Route
+              path="restaurant-info"
+              element={<RestaurantInfoAdminPage />}
+            />
             <Route path="users" element={<UsersAdminPage />} />
           </Route>
 

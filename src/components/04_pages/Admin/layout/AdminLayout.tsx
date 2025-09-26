@@ -5,14 +5,13 @@ import {
   Toolbar,
   IconButton,
   Typography,
-  Button,
   Drawer,
-  Box,
   List,
   ListItemButton,
+  ListItemIcon,
   ListItemText,
   Badge,
-  Chip,
+  Box,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -29,17 +28,21 @@ import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
 
+type LinkDef = {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+};
+
 export default function AdminLayout() {
   const [open, setOpen] = React.useState(false);
-  const { logout, username } = useAuth();
   const loc = useLocation();
-  const { alerts } = useAdminAlerts();
+  const { logout, username } = useAuth();
+  const { alerts, total } = useAdminAlerts();
 
-  const totalAlerts =
-    alerts.reservationsRequested + alerts.ordersNew + alerts.buffetOrdersNew;
-
-  const items = [
-    { to: "/admin", label: "Dashboard", icon: <DashboardIcon />, badge: 0 },
+  const links: LinkDef[] = [
+    { to: "/admin", label: "Dashboard", icon: <DashboardIcon /> },
     {
       to: "/admin/reservations",
       label: "Reservations",
@@ -58,64 +61,36 @@ export default function AdminLayout() {
       icon: <RamenDiningIcon />,
       badge: alerts.buffetOrdersNew,
     },
-    {
-      to: "/admin/food-items",
-      label: "Food Items",
-      icon: <SetMealIcon />,
-      badge: 0,
-    },
-    {
-      to: "/admin/menu-items",
-      label: "Menu Items",
-      icon: <LunchDiningIcon />,
-      badge: 0,
-    },
+    { to: "/admin/food-items", label: "Food Items", icon: <SetMealIcon /> },
+    { to: "/admin/menu-items", label: "Menu Items", icon: <LunchDiningIcon /> },
     {
       to: "/admin/buffet-items",
       label: "Buffet Items",
       icon: <LunchDiningIcon />,
-      badge: 0,
     },
     {
       to: "/admin/restaurant-info",
       label: "Restaurant Info",
       icon: <StoreIcon />,
-      badge: 0,
     },
-    { to: "/admin/users", label: "Users", icon: <PeopleIcon />, badge: 0 },
+    { to: "/admin/users", label: "Users", icon: <PeopleIcon /> },
   ];
 
-  const drawer = (
-    <Box sx={{ width: 280, bgcolor: "#F6F0DE", height: "100%" }}>
-      <Box
-        sx={{
-          p: 2,
-          fontWeight: 800,
-          color: AK_DARK,
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-        }}
-      >
-        Admin
-        {totalAlerts > 0 && (
-          <Chip
-            size="small"
-            color="error"
-            label={`${totalAlerts} new`}
-            sx={{ ml: "auto" }}
-          />
-        )}
-      </Box>
+  const DrawerList = (
+    <Box
+      sx={{ width: 280, bgcolor: "#F6F0DE", height: "100%" }}
+      role="presentation"
+      onClick={() => setOpen(false)}
+    >
+      <Box sx={{ p: 2, fontWeight: 800, color: AK_DARK }}>Admin</Box>
       <List>
-        {items.map((it) => {
-          const active = loc.pathname === it.to;
-          return (
+        {links.map((l) => {
+          const active = loc.pathname === l.to;
+          const content = (
             <ListItemButton
-              key={it.to}
+              key={l.to}
               component={RouterLink}
-              to={it.to}
-              onClick={() => setOpen(false)}
+              to={l.to}
               sx={{
                 borderLeft: active
                   ? `3px solid ${AK_GOLD}`
@@ -123,22 +98,29 @@ export default function AdminLayout() {
                 bgcolor: active ? "rgba(209,160,31,0.08)" : "transparent",
               }}
             >
-              <Box sx={{ mr: 1.25, display: "flex", alignItems: "center" }}>
-                {it.icon}
-              </Box>
+              <ListItemIcon sx={{ color: AK_DARK, minWidth: 36 }}>
+                {l.badge ? (
+                  <Badge color="error" badgeContent={l.badge}>
+                    {l.icon}
+                  </Badge>
+                ) : (
+                  l.icon
+                )}
+              </ListItemIcon>
+              {/* avoid deprecated primaryTypographyProps */}
               <ListItemText
                 primary={
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <span>{it.label}</span>
-                    {!!it.badge && (
-                      <Chip size="small" color="error" label={it.badge} />
-                    )}
-                  </Box>
+                  <Typography
+                    sx={{ color: AK_DARK, fontWeight: active ? 700 : 500 }}
+                  >
+                    {l.label}
+                  </Typography>
                 }
-                slotProps={{ primary: { sx: { color: AK_DARK } } }}
               />
             </ListItemButton>
           );
+
+          return <Box key={l.to}>{content}</Box>;
         })}
       </List>
     </Box>
@@ -153,42 +135,55 @@ export default function AdminLayout() {
       >
         <Toolbar sx={{ color: "inherit" }}>
           <IconButton
+            color="inherit"
+            edge="start"
             onClick={() => setOpen(true)}
             sx={{ mr: 1 }}
-            // burger turns red & shows count when there are new alerts
-            color={totalAlerts > 0 ? "error" : "inherit"}
           >
-            <Badge color="error" badgeContent={totalAlerts} overlap="circular">
+            <Badge
+              color="error"
+              overlap="circular"
+              invisible={!total}
+              badgeContent={total}
+            >
               <MenuIcon />
             </Badge>
           </IconButton>
-
           <Typography sx={{ flex: 1, fontWeight: 800, color: "inherit" }}>
             Asian Kitchen · Admin
           </Typography>
-
           <Typography sx={{ mr: 2, opacity: 0.9, color: "inherit" }}>
             {username}
           </Typography>
-          <Button
-            variant="contained"
+          <Box
+            component="button"
             onClick={logout}
-            sx={{
-              bgcolor: AK_GOLD,
-              color: AK_DARK,
-              fontWeight: 800,
-              "&:hover": { bgcolor: "#E2B437" },
-            }}
+            style={{ border: "none", cursor: "pointer" }}
+            className="MuiButton-root"
           >
-            Logout
-          </Button>
+            <Box
+              sx={{
+                px: 2,
+                py: 1,
+                borderRadius: 1,
+                bgcolor: AK_GOLD,
+                color: AK_DARK,
+                fontWeight: 800,
+                "&:hover": { bgcolor: "#E2B437" },
+              }}
+            >
+              LOGOUT
+            </Box>
+          </Box>
         </Toolbar>
       </AppBar>
-      <Toolbar /> {/* spacer under appbar */}
+
+      <Toolbar />
       <Drawer open={open} onClose={() => setOpen(false)}>
-        {drawer}
+        {DrawerList}
       </Drawer>
-      <Box sx={{ p: { xs: 2, md: 3 } }}>
+
+      <Box sx={{ p: 3 }}>
         <Outlet />
       </Box>
     </Box>
