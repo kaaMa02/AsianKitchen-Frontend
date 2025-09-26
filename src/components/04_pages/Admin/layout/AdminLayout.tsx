@@ -12,6 +12,7 @@ import {
   ListItemText,
   Badge,
   Box,
+  Button,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -155,26 +156,22 @@ export default function AdminLayout() {
           <Typography sx={{ mr: 2, opacity: 0.9, color: "inherit" }}>
             {username}
           </Typography>
-          <Box
-            component="button"
+          <Button
             onClick={logout}
-            style={{ border: "none", cursor: "pointer" }}
-            className="MuiButton-root"
+            size="small"
+            disableElevation
+            sx={{
+              bgcolor: AK_GOLD,
+              color: AK_DARK,
+              fontWeight: 800,
+              px: 2,
+              height: 36,
+              "&:hover": { bgcolor: "#E2B437" },
+              "&:focus-visible": { outline: "none" },
+            }}
           >
-            <Box
-              sx={{
-                px: 2,
-                py: 1,
-                borderRadius: 1,
-                bgcolor: AK_GOLD,
-                color: AK_DARK,
-                fontWeight: 800,
-                "&:hover": { bgcolor: "#E2B437" },
-              }}
-            >
-              LOGOUT
-            </Box>
-          </Box>
+            Logout
+          </Button>
         </Toolbar>
       </AppBar>
 

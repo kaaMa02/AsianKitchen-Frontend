@@ -21,7 +21,6 @@ import {
   ReservationReadDTO,
   ReservationStatus,
 } from "../../../types/api-types";
-import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -40,7 +39,6 @@ export default function ReservationsAdminPage() {
   const [rows, setRows] = React.useState<ReservationReadDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [busyIds, setBusyIds] = React.useState<Record<string, boolean>>({});
-  const { markSeen } = useAdminAlerts();
 
   React.useEffect(() => {
     (async () => {
@@ -54,24 +52,32 @@ export default function ReservationsAdminPage() {
       } finally {
         setLoading(false);
       }
-      // fire-and-forget; do not surface errors
-      markSeen("reservations").catch(() => {});
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markSeen]);
+  }, []);
 
   const mark = (id: string, v: boolean) =>
     setBusyIds((prev) => ({ ...prev, [id]: v }));
 
+  /** Optimistic update: flip status immediately, rollback on failure */
   const onSetStatus = async (id: string, status: ReservationStatus) => {
+    // optimistic change
+    setRows((prev) =>
+      prev.map((r) => (String(r.id) === id ? { ...r, status } : r))
+    );
+    mark(id, true);
+
     try {
-      mark(id, true);
-      const updated = await setReservationStatus(id, status);
-      setRows((prev) =>
-        prev.map((r) => (String(r.id) === String(updated.id) ? updated : r))
-      );
+      await setReservationStatus(id, status);
       notifySuccess(`Reservation ${status.toLowerCase()}!`);
     } catch (err) {
+      // rollback
+      setRows((prev) =>
+        prev.map((r) =>
+          String(r.id) === id
+            ? { ...r, status: ReservationStatus.REQUESTED }
+            : r
+        )
+      );
       console.error("Failed to update reservation status", err);
       notifyError(getErrorMessage(err));
     } finally {
@@ -80,10 +86,10 @@ export default function ReservationsAdminPage() {
   };
 
   const onDelete = async (id: string) => {
+    mark(id, true);
     try {
-      mark(id, true);
       await deleteReservation(id);
-      setRows((prev) => prev.filter((r) => String(r.id) !== String(id)));
+      setRows((prev) => prev.filter((r) => String(r.id) !== id));
       notifySuccess("Reservation deleted");
     } catch (err) {
       console.error("Failed to delete reservation", err);
@@ -123,6 +129,8 @@ export default function ReservationsAdminPage() {
           {rows.map((r) => {
             const id = String(r.id);
             const busy = !!busyIds[id];
+            const decided = r.status !== ReservationStatus.REQUESTED;
+
             return (
               <TableRow key={id}>
                 <TableCell>
@@ -137,38 +145,7 @@ export default function ReservationsAdminPage() {
                   <Chip label={r.status} size="small" />
                 </TableCell>
                 <TableCell align="right">
-                  <Box
-                    sx={{ display: "inline-flex", gap: 1, flexWrap: "wrap" }}
-                  >
-                    {r.status === ReservationStatus.REQUESTED ? (
-                      <>
-                        <Button
-                          onClick={() =>
-                            onSetStatus(id, ReservationStatus.CONFIRMED)
-                          }
-                          size="small"
-                          disabled={busy}
-                          variant="contained"
-                          sx={{
-                            bgcolor: AK_GOLD,
-                            color: AK_DARK,
-                            "&:hover": { bgcolor: "#E2B437" },
-                          }}
-                        >
-                          Confirm
-                        </Button>
-                        <Button
-                          onClick={() =>
-                            onSetStatus(id, ReservationStatus.REJECTED)
-                          }
-                          size="small"
-                          disabled={busy}
-                          variant="outlined"
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    ) : null}
+                  {decided ? (
                     <Button
                       onClick={() => onDelete(id)}
                       size="small"
@@ -178,7 +155,46 @@ export default function ReservationsAdminPage() {
                     >
                       Delete
                     </Button>
-                  </Box>
+                  ) : (
+                    <Box
+                      sx={{ display: "inline-flex", gap: 1, flexWrap: "wrap" }}
+                    >
+                      <Button
+                        onClick={() =>
+                          onSetStatus(id, ReservationStatus.CONFIRMED)
+                        }
+                        size="small"
+                        disabled={busy}
+                        variant="contained"
+                        sx={{
+                          bgcolor: AK_GOLD,
+                          color: AK_DARK,
+                          "&:hover": { bgcolor: "#E2B437" },
+                        }}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        onClick={() =>
+                          onSetStatus(id, ReservationStatus.REJECTED)
+                        }
+                        size="small"
+                        disabled={busy}
+                        variant="outlined"
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        onClick={() => onDelete(id)}
+                        size="small"
+                        disabled={busy}
+                        variant="text"
+                        color="error"
+                      >
+                        Delete
+                      </Button>
+                    </Box>
+                  )}
                 </TableCell>
               </TableRow>
             );
