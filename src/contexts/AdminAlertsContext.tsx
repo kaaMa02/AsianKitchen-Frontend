@@ -32,23 +32,52 @@ export function AdminAlertsProvider({
     buffetOrdersNew: 0,
   });
 
+  // audio handling
   const lastTotal = React.useRef(0);
   const audio = React.useRef<HTMLAudioElement | null>(null);
+  const primed = React.useRef(false);
 
+  // create audio element
   React.useEffect(() => {
     audio.current = new Audio("/notify.mp3");
+    audio.current.preload = "auto";
+  }, []);
+
+  // prime on first user interaction (required by browsers)
+  React.useEffect(() => {
+    const prime = () => {
+      if (primed.current || !audio.current) return;
+      // Try to play once, then immediately pause to “unlock” audio
+      audio.current
+        .play()
+        .then(() => {
+          audio.current?.pause();
+          if (audio.current) audio.current.currentTime = 0;
+          primed.current = true;
+        })
+        .catch(() => {
+          // If blocked, we'll try again on next interaction
+        });
+    };
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
   }, []);
 
   const refresh = React.useCallback(async () => {
     const a = await getAdminAlerts();
     const total = a.reservationsRequested + a.ordersNew + a.buffetOrdersNew;
-    if (total > lastTotal.current) {
+    if (total > lastTotal.current && primed.current) {
       audio.current?.play().catch(() => {});
     }
     lastTotal.current = total;
     setAlerts(a);
   }, []);
 
+  // poll
   React.useEffect(() => {
     let stop = false;
     const loop = async () => {
@@ -68,7 +97,7 @@ export function AdminAlertsProvider({
       const ks = Array.isArray(kinds) ? kinds : [kinds];
       try {
         await markAlertsSeen(ks);
-        // optimistic local reset
+        // optimistic zeroing
         setAlerts((a) => ({
           reservationsRequested: ks.includes("reservations")
             ? 0
@@ -76,13 +105,13 @@ export function AdminAlertsProvider({
           ordersNew: ks.includes("orders") ? 0 : a.ordersNew,
           buffetOrdersNew: ks.includes("buffet") ? 0 : a.buffetOrdersNew,
         }));
+        // recalc lastTotal based on optimistic state
         lastTotal.current =
           (ks.includes("reservations") ? 0 : alerts.reservationsRequested) +
           (ks.includes("orders") ? 0 : alerts.ordersNew) +
           (ks.includes("buffet") ? 0 : alerts.buffetOrdersNew);
       } finally {
-        // resync after a moment
-        setTimeout(() => refresh().catch(() => {}), 2000);
+        setTimeout(() => refresh().catch(() => {}), 1200);
       }
     },
     [alerts, refresh]

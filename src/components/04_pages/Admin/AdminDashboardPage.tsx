@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, Button } from "@mui/material";
+import { Box, Paper, Typography, Button, Chip } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 
@@ -13,19 +13,19 @@ export default function AdminDashboard() {
       title: "Reservations",
       to: "/admin/reservations",
       description: "Approve or reject reservations.",
-      count: alerts.reservationsRequested,
+      badge: alerts.reservationsRequested,
     },
     {
       title: "Menu Orders",
       to: "/admin/orders",
       description: "See and update takeaway/delivery orders.",
-      count: alerts.ordersNew,
+      badge: alerts.ordersNew,
     },
     {
       title: "Buffet Orders",
       to: "/admin/buffet-orders",
       description: "See and update buffet orders.",
-      count: alerts.buffetOrdersNew,
+      badge: alerts.buffetOrdersNew,
     },
     {
       title: "Food Items",
@@ -71,35 +71,14 @@ export default function AdminDashboard() {
             border: "1px solid #E2D9C2",
             bgcolor: "#f5efdf",
             borderRadius: 1,
-            position: "relative",
           }}
         >
-          {/* little red bubble when there are new items */}
-          {!!c.count && (
-            <Box
-              sx={{
-                position: "absolute",
-                top: 12,
-                right: 12,
-                minWidth: 22,
-                height: 22,
-                borderRadius: "999px",
-                bgcolor: "#cf2e2e",
-                color: "white",
-                fontSize: 12,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                px: 1,
-              }}
-              aria-label={`${c.count} new`}
-            >
-              {c.count}
-            </Box>
-          )}
-          <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800 }}>
-            {c.title}
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800 }}>
+              {c.title}
+            </Typography>
+            {!!c.badge && <Chip size="small" color="error" label={c.badge} />}
+          </Box>
           <Typography sx={{ color: AK_DARK, opacity: 0.9, mt: 0.5, mb: 2 }}>
             {c.description}
           </Typography>

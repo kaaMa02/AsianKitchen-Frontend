@@ -1,27 +1,28 @@
 import * as React from "react";
 import { Outlet, Link as RouterLink, useLocation } from "react-router-dom";
 import {
-  Box,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemText,
   AppBar,
   Toolbar,
   IconButton,
   Typography,
   Button,
+  Drawer,
+  Box,
+  List,
+  ListItemButton,
+  ListItemText,
   Badge,
+  Chip,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
-import SetMealIcon from "@mui/icons-material/SetMeal";
 import RamenDiningIcon from "@mui/icons-material/RamenDining";
+import SetMealIcon from "@mui/icons-material/SetMeal";
+import LunchDiningIcon from "@mui/icons-material/LunchDining";
 import StoreIcon from "@mui/icons-material/Store";
 import PeopleIcon from "@mui/icons-material/People";
-import LunchDiningIcon from "@mui/icons-material/LunchDining";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
 
@@ -34,7 +35,10 @@ export default function AdminLayout() {
   const loc = useLocation();
   const { alerts } = useAdminAlerts();
 
-  const links = [
+  const totalAlerts =
+    alerts.reservationsRequested + alerts.ordersNew + alerts.buffetOrdersNew;
+
+  const items = [
     { to: "/admin", label: "Dashboard", icon: <DashboardIcon />, badge: 0 },
     {
       to: "/admin/reservations",
@@ -82,25 +86,35 @@ export default function AdminLayout() {
   ];
 
   const drawer = (
-    <Box sx={{ width: 260, bgcolor: "#F6F0DE", height: "100%" }}>
-      <Box sx={{ p: 2, fontWeight: 800, color: AK_DARK }}>Admin</Box>
+    <Box sx={{ width: 280, bgcolor: "#F6F0DE", height: "100%" }}>
+      <Box
+        sx={{
+          p: 2,
+          fontWeight: 800,
+          color: AK_DARK,
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+        }}
+      >
+        Admin
+        {totalAlerts > 0 && (
+          <Chip
+            size="small"
+            color="error"
+            label={`${totalAlerts} new`}
+            sx={{ ml: "auto" }}
+          />
+        )}
+      </Box>
       <List>
-        {links.map((l) => {
-          const active = loc.pathname === l.to;
-          const label = (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Box sx={{ mr: 1.25 }}>{l.icon}</Box>
-              <Box component="span" sx={{ flex: 1 }}>
-                {l.label}
-              </Box>
-              {l.badge > 0 && <Badge color="error" badgeContent={l.badge} />}
-            </Box>
-          );
+        {items.map((it) => {
+          const active = loc.pathname === it.to;
           return (
             <ListItemButton
-              key={l.to}
+              key={it.to}
               component={RouterLink}
-              to={l.to}
+              to={it.to}
               onClick={() => setOpen(false)}
               sx={{
                 borderLeft: active
@@ -109,9 +123,19 @@ export default function AdminLayout() {
                 bgcolor: active ? "rgba(209,160,31,0.08)" : "transparent",
               }}
             >
+              <Box sx={{ mr: 1.25, display: "flex", alignItems: "center" }}>
+                {it.icon}
+              </Box>
               <ListItemText
-                primary={label}
-                primaryTypographyProps={{ sx: { color: AK_DARK } }}
+                primary={
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <span>{it.label}</span>
+                    {!!it.badge && (
+                      <Chip size="small" color="error" label={it.badge} />
+                    )}
+                  </Box>
+                }
+                slotProps={{ primary: { sx: { color: AK_DARK } } }}
               />
             </ListItemButton>
           );
@@ -128,14 +152,15 @@ export default function AdminLayout() {
         sx={{ bgcolor: AK_DARK, color: "#EFE7CE" }}
       >
         <Toolbar sx={{ color: "inherit" }}>
-          {/* Hide burger on desktop; show on mobile */}
           <IconButton
-            color="inherit"
-            edge="start"
             onClick={() => setOpen(true)}
-            sx={{ mr: 1, display: { xs: "inline-flex", md: "none" } }}
+            sx={{ mr: 1 }}
+            // burger turns red & shows count when there are new alerts
+            color={totalAlerts > 0 ? "error" : "inherit"}
           >
-            <MenuIcon />
+            <Badge color="error" badgeContent={totalAlerts} overlap="circular">
+              <MenuIcon />
+            </Badge>
           </IconButton>
 
           <Typography sx={{ flex: 1, fontWeight: 800, color: "inherit" }}>
@@ -159,31 +184,12 @@ export default function AdminLayout() {
           </Button>
         </Toolbar>
       </AppBar>
-
-      <Toolbar />
+      <Toolbar /> {/* spacer under appbar */}
       <Drawer open={open} onClose={() => setOpen(false)}>
         {drawer}
       </Drawer>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "260px 1fr",
-          alignItems: "flex-start",
-        }}
-      >
-        <Box
-          sx={{
-            display: { xs: "none", md: "block" },
-            borderRight: "1px solid #eee",
-            minHeight: "calc(100vh - 64px)",
-          }}
-        >
-          {drawer}
-        </Box>
-        <Box sx={{ p: 3 }}>
-          <Outlet />
-        </Box>
+      <Box sx={{ p: { xs: 2, md: 3 } }}>
+        <Outlet />
       </Box>
     </Box>
   );
