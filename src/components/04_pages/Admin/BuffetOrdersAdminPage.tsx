@@ -13,9 +13,9 @@ import {
   FormControl,
   SelectChangeEvent,
   IconButton,
-  Tooltip,
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
+
 import {
   listAllBuffetOrders,
   updateBuffetOrderStatus,
@@ -23,9 +23,13 @@ import {
 import { notifyError, notifySuccess } from "../../../services/toast";
 import { BuffetOrderReadDTO, OrderStatus } from "../../../types/api-types";
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
-import { printBuffetOrder } from "../../../services/printing";
+import {
+  printCustomerOrderReceipt,
+  autoPrintNewPaid,
+} from "../../../services/printing";
 
 const AK_DARK = "#0B2D24";
+
 const STATUS_OPTIONS: OrderStatus[] = [
   OrderStatus.CONFIRMED,
   OrderStatus.PREPARING,
@@ -34,38 +38,17 @@ const STATUS_OPTIONS: OrderStatus[] = [
   OrderStatus.CANCELLED,
 ];
 
-const PRINTED_KEY = "ak_printed_buffet_v1";
-
-function loadPrinted(): Set<string> {
-  try {
-    const arr = JSON.parse(
-      localStorage.getItem(PRINTED_KEY) || "[]"
-    ) as string[];
-    const s = new Set<string>();
-    arr.forEach((v) => s.add(v));
-    return s;
-  } catch {
-    return new Set<string>();
-  }
-}
-function savePrinted(set: Set<string>) {
-  const arr: string[] = [];
-  set.forEach((v) => arr.push(v));
-  localStorage.setItem(PRINTED_KEY, JSON.stringify(arr));
-}
-
 export default function BuffetOrdersAdminPage() {
   const [rows, setRows] = React.useState<BuffetOrderReadDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const { markSeen } = useAdminAlerts();
-  const printedRef = React.useRef<Set<string>>(loadPrinted());
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listAllBuffetOrders();
-      setRows(data);
+      const data = await listAllBuffetOrders(); // paid buffet orders
+      setRows(data ?? []);
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to load buffet orders");
     } finally {
@@ -75,23 +58,12 @@ export default function BuffetOrdersAdminPage() {
   };
 
   React.useEffect(() => {
-    load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
-    rows.forEach((o) => {
-      const id = String(o.id);
-      if (o.paymentStatus === "SUCCEEDED" && !printedRef.current.has(id)) {
-        try {
-          printBuffetOrder(o);
-          printedRef.current.add(id);
-          savePrinted(printedRef.current);
-        } catch {
-          /* ignore */
-        }
-      }
-    });
+    if (rows.length) void autoPrintNewPaid(rows as any);
   }, [rows]);
 
   const onChangeStatus = async (id: string, next: OrderStatus) => {
@@ -107,17 +79,6 @@ export default function BuffetOrdersAdminPage() {
       await load();
     } finally {
       setSavingId(null);
-    }
-  };
-
-  const onPrint = (o: BuffetOrderReadDTO) => {
-    try {
-      printBuffetOrder(o);
-      const id = String(o.id);
-      printedRef.current.add(id);
-      savePrinted(printedRef.current);
-    } catch {
-      /* ignore */
     }
   };
 
@@ -139,20 +100,20 @@ export default function BuffetOrdersAdminPage() {
             <TableCell>Total</TableCell>
             <TableCell>Status</TableCell>
             <TableCell>Payment</TableCell>
-            <TableCell>Print</TableCell>
-            <TableCell align="right">Progress</TableCell>
+            <TableCell align="right">Progress / Print</TableCell>
           </TableRow>
         </TableHead>
 
         <TableBody>
           {!loading && rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8}>No orders</TableCell>
+              <TableCell colSpan={7}>No orders</TableCell>
             </TableRow>
           )}
 
           {rows.map((o) => {
             const id = String(o.id);
+            const canPrint = o.paymentStatus === "SUCCEEDED";
             return (
               <TableRow key={id}>
                 <TableCell>
@@ -169,29 +130,21 @@ export default function BuffetOrdersAdminPage() {
                   <Chip label={o.status} size="small" />
                 </TableCell>
                 <TableCell>
-                  <Chip label={o.paymentStatus || "N/A"} size="small" />
-                </TableCell>
-                <TableCell>
-                  <Tooltip title="Print receipt">
-                    <span>
-                      <IconButton
-                        onClick={() => onPrint(o)}
-                        size="small"
-                        color="primary"
-                      >
-                        <PrintIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
+                  <Chip
+                    label={o.paymentStatus || "N/A"}
+                    size="small"
+                    color={canPrint ? "success" : "default"}
+                  />
                 </TableCell>
                 <TableCell align="right">
-                  <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
                     <Select
                       value={o.status as string}
                       disabled={savingId === id}
                       onChange={(e: SelectChangeEvent<string>) => {
                         const next = e.target.value as OrderStatus;
-                        if (next && next !== o.status) onChangeStatus(id, next);
+                        if (next && next !== o.status)
+                          void onChangeStatus(id, next);
                       }}
                     >
                       {STATUS_OPTIONS.map((s) => (
@@ -201,6 +154,18 @@ export default function BuffetOrdersAdminPage() {
                       ))}
                     </Select>
                   </FormControl>
+
+                  <IconButton
+                    aria-label="Print receipt"
+                    size="small"
+                    onClick={() => printCustomerOrderReceipt(o as any)}
+                    disabled={!canPrint}
+                    title={
+                      canPrint ? "Print receipt" : "Print enabled after payment"
+                    }
+                  >
+                    <PrintIcon fontSize="small" />
+                  </IconButton>
                 </TableCell>
               </TableRow>
             );
