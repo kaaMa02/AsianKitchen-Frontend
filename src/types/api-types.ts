@@ -3,6 +3,21 @@ export type UUID = string;
 export type BigDecimal = string;
 export type LocalDateTime = string;
 
+
+// --- Payments ---
+export enum PaymentStatus {
+  REQUIRES_PAYMENT_METHOD = "REQUIRES_PAYMENT_METHOD",
+  SUCCEEDED = "SUCCEEDED",
+  FAILED = "FAILED",
+}
+
+export enum PaymentMethod {
+  CARD = "CARD",
+  TWINT = "TWINT",
+  CASH = "CASH",
+  POS_CARD = "POS_CARD",
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Address
 
@@ -95,8 +110,15 @@ export interface BuffetItemWriteDTO {
   price: BigDecimal;
 }
 
-export interface BuffetOrderItemDTO {
+export interface BuffetOrderItemWriteDTO {
   buffetItemId: UUID;
+  quantity: number;
+}
+
+export interface BuffetOrderItemReadDTO {
+  buffetItemId: UUID;
+  name?: string;
+  unitPrice?: BigDecimal;
   quantity: number;
 }
 
@@ -127,20 +149,22 @@ export interface BuffetOrderWriteDTO {
   customerInfo: CustomerInfoDTO;
   orderType: OrderType;
   specialInstructions?: string;
-  items: BuffetOrderItemDTO[];
+  items: BuffetOrderItemWriteDTO[];
+  paymentMethod: PaymentMethod;
 }
 
 export interface BuffetOrderReadDTO {
   id: UUID;
-  customerInfo: CustomerInfoDTO; // fixed
+  customerInfo: CustomerInfoDTO;
   orderType: OrderType;
   status: OrderStatus;
   createdAt: LocalDateTime;
   totalPrice: BigDecimal;
   specialInstructions?: string; // added
-  orderItems?: BuffetOrderItemDTO[]; // added if frontend needs items
+  orderItems?: BuffetOrderItemReadDTO[];
   paymentStatus?: PaymentStatus;
   paymentIntentId?: string | null;
+  paymentMethod: PaymentMethod;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,6 +208,8 @@ export interface MenuItemWriteDTO {
 export interface OrderItemReadDTO {
   id: UUID;
   menuItemId?: UUID;
+  menuItemName?: string;
+  unitPrice?: BigDecimal;
   quantity: number;
 }
 
@@ -198,6 +224,7 @@ export interface CustomerOrderWriteDTO {
   orderType: OrderType;
   specialInstructions?: string;
   items: OrderItemWriteDTO[];
+  paymentMethod: PaymentMethod;
 }
 
 export interface CustomerOrderReadDTO {
@@ -211,6 +238,7 @@ export interface CustomerOrderReadDTO {
   specialInstructions?: string;
   paymentStatus?: PaymentStatus;
   paymentIntentId?: string | null;
+  paymentMethod: PaymentMethod;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,11 +329,4 @@ export interface ContactMessageReadDTO {
   phone?: string;
   message: string;
   createdAt: LocalDateTime;
-}
-
-// --- Payments ---
-export enum PaymentStatus {
-  REQUIRES_PAYMENT_METHOD = "REQUIRES_PAYMENT_METHOD",
-  SUCCEEDED = "SUCCEEDED",
-  FAILED = "FAILED",
 }

@@ -13,6 +13,7 @@ import {
   FormControl,
   SelectChangeEvent,
   IconButton,
+  Stack,
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
 
@@ -21,11 +22,16 @@ import {
   updateBuffetOrderStatus,
 } from "../../../services/buffetOrders";
 import { notifyError, notifySuccess } from "../../../services/toast";
-import { BuffetOrderReadDTO, OrderStatus } from "../../../types/api-types";
+import {
+  BuffetOrderReadDTO,
+  OrderStatus,
+  PaymentMethod,
+} from "../../../types/api-types";
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 import {
-  printCustomerOrderReceipt,
-  autoPrintNewPaid,
+  printBuffetOrderReceipt,
+  autoPrintNewPaidBuffet,
+  canPrintNow,
 } from "../../../services/printing";
 
 const AK_DARK = "#0B2D24";
@@ -47,7 +53,7 @@ export default function BuffetOrdersAdminPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listAllBuffetOrders(); // paid buffet orders
+      const data = await listAllBuffetOrders(); // includes SUCCEEDED + CASH
       setRows(data ?? []);
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to load buffet orders");
@@ -63,7 +69,7 @@ export default function BuffetOrdersAdminPage() {
   }, []);
 
   React.useEffect(() => {
-    if (rows.length) void autoPrintNewPaid(rows as any);
+    if (rows.length) void autoPrintNewPaidBuffet(rows);
   }, [rows]);
 
   const onChangeStatus = async (id: string, next: OrderStatus) => {
@@ -81,6 +87,21 @@ export default function BuffetOrdersAdminPage() {
       setSavingId(null);
     }
   };
+
+  const renderPaymentChips = (o: BuffetOrderReadDTO) => (
+    <Stack direction="row" spacing={0.5}>
+      <Chip
+        label={o.paymentMethod ?? "—"}
+        size="small"
+        color={o.paymentMethod === PaymentMethod.CASH ? "warning" : "default"}
+      />
+      <Chip
+        label={o.paymentStatus ?? "N/A"}
+        size="small"
+        color={o.paymentStatus === "SUCCEEDED" ? "success" : "default"}
+      />
+    </Stack>
+  );
 
   return (
     <Paper
@@ -113,7 +134,7 @@ export default function BuffetOrdersAdminPage() {
 
           {rows.map((o) => {
             const id = String(o.id);
-            const canPrint = o.paymentStatus === "SUCCEEDED";
+            const printEnabled = canPrintNow(o);
             return (
               <TableRow key={id}>
                 <TableCell>
@@ -129,13 +150,7 @@ export default function BuffetOrdersAdminPage() {
                 <TableCell>
                   <Chip label={o.status} size="small" />
                 </TableCell>
-                <TableCell>
-                  <Chip
-                    label={o.paymentStatus || "N/A"}
-                    size="small"
-                    color={canPrint ? "success" : "default"}
-                  />
-                </TableCell>
+                <TableCell>{renderPaymentChips(o)}</TableCell>
                 <TableCell align="right">
                   <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
                     <Select
@@ -158,10 +173,12 @@ export default function BuffetOrdersAdminPage() {
                   <IconButton
                     aria-label="Print receipt"
                     size="small"
-                    onClick={() => printCustomerOrderReceipt(o as any)}
-                    disabled={!canPrint}
+                    onClick={() => printBuffetOrderReceipt(o)}
+                    disabled={!printEnabled}
                     title={
-                      canPrint ? "Print receipt" : "Print enabled after payment"
+                      printEnabled
+                        ? "Print receipt"
+                        : "Print is enabled after payment"
                     }
                   >
                     <PrintIcon fontSize="small" />
