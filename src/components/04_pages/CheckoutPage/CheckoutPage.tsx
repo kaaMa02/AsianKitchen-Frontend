@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import TextField from "@mui/material/TextField";
 
+import { getHoursStatus, type HoursStatusDTO } from "../../../services/hours";
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -53,7 +54,7 @@ const emptyCustomer: CustomerInfoDTO = {
   address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-// NEW: Delivery fee rule -> 5 CHF under 100; free at/above 100
+// Delivery fee: 5 CHF if subtotal < 100; free from 100
 function calcDeliveryFee(orderType: OrderType, subtotal: number) {
   if (orderType !== "DELIVERY") return 0;
   return subtotal >= 100 ? 0 : 5;
@@ -140,7 +141,7 @@ export default function CheckoutPage() {
   const deliveryFee = calcDeliveryFee(orderType, itemsSubtotal);
   const grand = +(itemsSubtotal + vat + deliveryFee).toFixed(2);
 
-  // NEW: UI minimum for DELIVERY (CHF 30)
+  // UI minimum for DELIVERY (CHF 30)
   const minDeliveryNotMet = orderType === "DELIVERY" && itemsSubtotal < 30;
 
   // form state
@@ -155,6 +156,14 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
     PaymentMethod.CARD
   );
+
+  // Live hours
+  const [hours, setHours] = React.useState<HoursStatusDTO>();
+  React.useEffect(() => {
+    getHoursStatus(orderType)
+      .then(setHours)
+      .catch(() => setHours(undefined));
+  }, [orderType]);
 
   // normalize cart lines
   const cartLines = React.useMemo(() => {
@@ -244,6 +253,16 @@ export default function CheckoutPage() {
     orderType !== "DELIVERY" ||
     (customer.address.plz && allowedPlz.has(customer.address.plz.trim()));
 
+  // Hours-based blocking
+  const blockedByHours = !!hours && !hours.openNow;
+  const hoursMsg = !hours
+    ? undefined
+    : !hours.openNow
+    ? hours.reason === "CUTOFF_DELIVERY"
+      ? "We’re close to closing time — delivery orders are paused."
+      : "We’re currently closed."
+    : undefined;
+
   // create order (+ optionally PI)
   const preparePayment = async () => {
     try {
@@ -278,6 +297,11 @@ export default function CheckoutPage() {
 
       if (minDeliveryNotMet) {
         setError("Minimum delivery order is CHF 30.00.");
+        return;
+      }
+
+      if (blockedByHours) {
+        setError(hoursMsg ?? "Ordering is currently unavailable.");
         return;
       }
 
@@ -389,6 +413,8 @@ export default function CheckoutPage() {
               ? "Card (online)"
               : paymentMethod === PaymentMethod.TWINT
               ? "TWINT (pay at pickup/delivery)"
+              : paymentMethod === PaymentMethod.POS_CARD
+              ? "POS Card (in-store terminal)"
               : "Cash"
           }
         />
@@ -533,6 +559,13 @@ export default function CheckoutPage() {
               </Alert>
             )}
 
+            {/* Hours warning */}
+            {blockedByHours && hoursMsg && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {hoursMsg}
+              </Alert>
+            )}
+
             {minDeliveryNotMet && (
               <Alert severity="warning" sx={{ mt: 2 }}>
                 Minimum delivery order is CHF 30.00.
@@ -555,7 +588,8 @@ export default function CheckoutPage() {
                 disabled={
                   preparing ||
                   (orderType === "DELIVERY" && !canDeliver) ||
-                  minDeliveryNotMet
+                  minDeliveryNotMet ||
+                  blockedByHours
                 }
                 sx={{
                   bgcolor: AK_GOLD,

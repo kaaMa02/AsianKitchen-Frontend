@@ -9,19 +9,38 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Alert from '@mui/material/Alert';
 import { useNavigate } from 'react-router-dom';
+import * as React from 'react';
 
 import { useCart } from '../../../contexts/CartContext';
 import { OrderType } from '../../../types/api-types';
+import { getHoursStatus, type HoursStatusDTO } from '../../../services/hours';
 
 type Props = { open: boolean; onClose: () => void };
 
-const MIN_TOTAL = 30;
+const MIN_DELIVERY_TOTAL = 30;
 
 export default function CartDrawer({ open, onClose }: Props) {
   const nav = useNavigate();
   const { state, inc, dec, remove, clear, total, setOrderType } = useCart();
 
-  const canCheckout = state.lines.length > 0 && total >= MIN_TOTAL;
+  // live hours (open / closed / delivery cutoff)
+  const [hours, setHours] = React.useState<HoursStatusDTO>();
+  React.useEffect(() => {
+    getHoursStatus(state.orderType as OrderType)
+      .then(setHours)
+      .catch(() => setHours(undefined));
+  }, [state.orderType, open]); // refresh when user opens drawer or toggles type
+
+  const isDelivery = state.orderType === OrderType.DELIVERY;
+
+  // Minimum: only for DELIVERY
+  const meetsMin = !isDelivery || total >= MIN_DELIVERY_TOTAL;
+
+  // Closed / cutoff logic from backend
+  const blockedByHours = !!hours && !hours.openNow;
+
+  // Final “can checkout”
+  const canCheckout = state.lines.length > 0 && meetsMin && !blockedByHours;
 
   const handleOrderType = (_: unknown, val: OrderType | null) => {
     if (val) setOrderType(val);
@@ -31,6 +50,16 @@ export default function CartDrawer({ open, onClose }: Props) {
     onClose();
     nav('/checkout');
   };
+
+  // Friendly reason
+  const hoursMsg =
+    !hours
+      ? undefined
+      : !hours.openNow
+        ? (hours.reason === 'CUTOFF_DELIVERY'
+            ? 'We’re close to closing time — delivery orders are paused.'
+            : 'We’re currently closed.')
+        : undefined;
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -101,10 +130,17 @@ export default function CartDrawer({ open, onClose }: Props) {
               </ToggleButtonGroup>
             </Box>
 
-            {/* Min total hint */}
-            {!canCheckout && (
+            {/* Min total hint (delivery only) */}
+            {isDelivery && !meetsMin && (
               <Alert sx={{ mt: 1.5 }} severity="info" variant="outlined">
-                Minimum order is CHF {MIN_TOTAL.toFixed(2)}.
+                Minimum delivery order is CHF {MIN_DELIVERY_TOTAL.toFixed(2)}.
+              </Alert>
+            )}
+
+            {/* Hours hint */}
+            {blockedByHours && hoursMsg && (
+              <Alert sx={{ mt: 1.5 }} severity="warning" variant="outlined">
+                {hoursMsg}
               </Alert>
             )}
 
