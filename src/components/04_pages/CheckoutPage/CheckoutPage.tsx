@@ -18,7 +18,10 @@ import {
 } from "@mui/material";
 import TextField from "@mui/material/TextField";
 
-import { getHoursStatus, type HoursStatusDTO } from "../../../services/hours";
+import {
+  getActiveDiscount,
+  type ActiveDiscountDTO,
+} from "../../../services/discounts";
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -38,8 +41,6 @@ import {
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
 
-/* ------------------------ small helpers ------------------------ */
-
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
 const CARD_BG = "#F4F7FB";
@@ -54,17 +55,17 @@ const emptyCustomer: CustomerInfoDTO = {
   address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-// Delivery fee: 5 CHF if subtotal < 100; free from 100
-function calcDeliveryFee(orderType: OrderType, subtotal: number) {
+function calcDeliveryFee(
+  orderType: OrderType,
+  discountedItemsSubtotal: number
+) {
   if (orderType !== "DELIVERY") return 0;
-  return subtotal >= 100 ? 0 : 5;
+  return discountedItemsSubtotal >= 100 ? 0 : 5;
 }
 
 function money(n: number) {
   return `CHF ${n.toFixed(2)}`;
 }
-
-/* ------------------------ payment step ------------------------ */
 
 function PaymentStep({
   totalToPay,
@@ -126,46 +127,10 @@ function PaymentStep({
   );
 }
 
-/* ------------------------ checkout page ------------------------ */
-
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { state, total: cartTotalFromCtx } = useCart();
 
-  // client preview amounts (server recomputes on PI create)
-  const orderType: OrderType = state.orderType;
-  const itemsSubtotal = Number.isFinite(cartTotalFromCtx)
-    ? (cartTotalFromCtx as number)
-    : 0;
-  const vat = +(itemsSubtotal * 0.026).toFixed(2); // 2.6% VAT
-  const deliveryFee = calcDeliveryFee(orderType, itemsSubtotal);
-  const grand = +(itemsSubtotal + vat + deliveryFee).toFixed(2);
-
-  // UI minimum for DELIVERY (CHF 30)
-  const minDeliveryNotMet = orderType === "DELIVERY" && itemsSubtotal < 30;
-
-  // form state
-  const [clientSecret, setClientSecret] = React.useState<string>();
-  const [error, setError] = React.useState<string>();
-  const [preparing, setPreparing] = React.useState(false);
-  const [customer, setCustomer] =
-    React.useState<CustomerInfoDTO>(emptyCustomer);
-  const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
-
-  // payment method (default to CARD)
-  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
-    PaymentMethod.CARD
-  );
-
-  // Live hours
-  const [hours, setHours] = React.useState<HoursStatusDTO>();
-  React.useEffect(() => {
-    getHoursStatus(orderType)
-      .then(setHours)
-      .catch(() => setHours(undefined));
-  }, [orderType]);
-
-  // normalize cart lines
   const cartLines = React.useMemo(() => {
     const anyState = state as any;
     return (anyState.lines ?? anyState.items ?? []) as Array<{
@@ -175,24 +140,49 @@ export default function CheckoutPage() {
     }>;
   }, [state]);
 
-  // validation
-  const validate = (c: CustomerInfoDTO): Errors => {
-    const e: Errors = {};
-    const req = (v?: string) => !v || !v.trim();
+  const hasMenu = cartLines.some((l) => l.kind === "MENU");
+  const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
 
-    if (req(c.firstName)) e.firstName = "Required";
-    if (req(c.lastName)) e.lastName = "Required";
-    if (req(c.email) || !/.+@.+\..+/.test(c.email))
-      e.email = "Valid email required";
-    if (req(c.phone)) e.phone = "Required";
+  const orderType: OrderType = state.orderType;
+  const itemsSubtotal = Number.isFinite(cartTotalFromCtx)
+    ? (cartTotalFromCtx as number)
+    : 0;
 
-    if (req(c.address.street)) e["address.street"] = "Required";
-    if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
-    if (req(c.address.plz)) e["address.plz"] = "Required";
-    if (req(c.address.city)) e["address.city"] = "Required";
+  const [disc, setDisc] = React.useState<{ menu: number; buffet: number }>({
+    menu: 0,
+    buffet: 0,
+  });
 
-    return e;
-  };
+  React.useEffect(() => {
+    getActiveDiscount()
+      .then((d: ActiveDiscountDTO) =>
+        setDisc({
+          menu: Number(d.percentMenu) || 0,
+          buffet: Number(d.percentBuffet) || 0,
+        })
+      )
+      .catch(() => setDisc({ menu: 0, buffet: 0 }));
+  }, []);
+
+  const percent = hasBuffet ? disc.buffet : disc.menu;
+  const discountAmount = +(itemsSubtotal * (percent / 100)).toFixed(2);
+  const discountedItems = +(itemsSubtotal - discountAmount).toFixed(2);
+
+  const vat = +(discountedItems * 0.026).toFixed(2);
+  const deliveryFee = calcDeliveryFee(orderType, discountedItems);
+  const grand = +(discountedItems + vat + deliveryFee).toFixed(2);
+
+  const minDeliveryNotMet = orderType === "DELIVERY" && itemsSubtotal < 30;
+
+  const [clientSecret, setClientSecret] = React.useState<string>();
+  const [error, setError] = React.useState<string>();
+  const [preparing, setPreparing] = React.useState(false);
+  const [customer, setCustomer] =
+    React.useState<CustomerInfoDTO>(emptyCustomer);
+  const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
+  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
+    PaymentMethod.CARD
+  );
 
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
@@ -201,6 +191,21 @@ export default function CheckoutPage() {
       mapped[short] = v;
     });
     setFieldErrors(mapped);
+  };
+
+  const validate = (c: CustomerInfoDTO): Errors => {
+    const e: Errors = {};
+    const req = (v?: string) => !v || !v.trim();
+    if (req(c.firstName)) e.firstName = "Required";
+    if (req(c.lastName)) e.lastName = "Required";
+    if (req(c.email) || !/.+@.+\..+/.test(c.email))
+      e.email = "Valid email required";
+    if (req(c.phone)) e.phone = "Required";
+    if (req(c.address.street)) e["address.street"] = "Required";
+    if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
+    if (req(c.address.plz)) e["address.plz"] = "Required";
+    if (req(c.address.city)) e["address.city"] = "Required";
+    return e;
   };
 
   const handleInput =
@@ -238,7 +243,6 @@ export default function CheckoutPage() {
       });
     };
 
-  // client PLZ gate (mirror backend)
   const allowedPlz = new Set([
     "4600",
     "4601",
@@ -253,17 +257,6 @@ export default function CheckoutPage() {
     orderType !== "DELIVERY" ||
     (customer.address.plz && allowedPlz.has(customer.address.plz.trim()));
 
-  // Hours-based blocking
-  const blockedByHours = !!hours && !hours.openNow;
-  const hoursMsg = !hours
-    ? undefined
-    : !hours.openNow
-    ? hours.reason === "CUTOFF_DELIVERY"
-      ? "We’re close to closing time — delivery orders are paused."
-      : "We’re currently closed."
-    : undefined;
-
-  // create order (+ optionally PI)
   const preparePayment = async () => {
     try {
       setError(undefined);
@@ -273,43 +266,30 @@ export default function CheckoutPage() {
         setError("Your cart is empty.");
         return;
       }
-
-      const hasMenu = cartLines.some((l) => l.kind === "MENU");
-      const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
       if (hasMenu && hasBuffet) {
         setError(
           "Mixed cart (menu + buffet) is not supported yet. Please order them separately."
         );
         return;
       }
-
       const errs = validate(customer);
       if (Object.keys(errs).length) {
         setFieldErrors(errs);
         setError("Please fix the highlighted fields.");
         return;
       }
-
       if (!canDeliver) {
-        setError("We currently don’t deliver to this address.");
+        setError("We currently do not deliver to this address.");
         return;
       }
-
       if (minDeliveryNotMet) {
         setError("Minimum delivery order is CHF 30.00.");
-        return;
-      }
-
-      if (blockedByHours) {
-        setError(hoursMsg ?? "Ordering is currently unavailable.");
         return;
       }
 
       setPreparing(true);
       await ensureCsrf();
 
-      // Branch on payment method:
-      // CARD -> Stripe PI flow; others -> create order and finish (no PI)
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
           userId: undefined,
@@ -323,7 +303,6 @@ export default function CheckoutPage() {
           paymentMethod,
         };
         const order = await createCustomerOrder(payload);
-
         if (paymentMethod === PaymentMethod.CARD) {
           const pi = await createIntentForCustomerOrder(order.id);
           setClientSecret(pi.clientSecret);
@@ -343,7 +322,6 @@ export default function CheckoutPage() {
           paymentMethod,
         };
         const order = await createBuffetOrder(payload);
-
         if (paymentMethod === PaymentMethod.CARD) {
           const pi = await createIntentForBuffetOrder(order.id);
           setClientSecret(pi.clientSecret);
@@ -367,7 +345,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Order summary (reused on both steps)
   const OrderSummary = (
     <Paper
       elevation={0}
@@ -385,13 +362,20 @@ export default function CheckoutPage() {
       </Typography>
 
       <Box sx={{ display: "grid", gap: 1.25 }}>
-        <Row label="Subtotal" value={money(itemsSubtotal)} />
+        <Row label="Items" value={money(itemsSubtotal)} />
+        {percent > 0 && (
+          <Row
+            label={`Discount (${percent}%)`}
+            value={`- ${money(discountAmount)}`}
+          />
+        )}
+        <Row label="Items after discount" value={money(discountedItems)} />
         <Row label="VAT (2.6%)" value={money(vat)} />
         <Row
           label="Delivery fee"
           value={
-            orderType === "DELIVERY" && itemsSubtotal >= 100
-              ? "CHF 0.00 (free ≥ CHF 100)"
+            orderType === "DELIVERY" && discountedItems >= 100
+              ? "CHF 0.00 (free at CHF 100)"
               : money(deliveryFee)
           }
         />
@@ -404,17 +388,17 @@ export default function CheckoutPage() {
         />
       </Box>
 
-      {/* Small hint about method */}
-      <Box sx={{ mt: 1.5 }}>
+      <Box sx={{ mt: 1.5, display: "flex", gap: 1, alignItems: "center" }}>
+        {percent > 0 && <Chip size="small" label={`${percent}% off active`} />}
         <Chip
           size="small"
           label={
             paymentMethod === PaymentMethod.CARD
               ? "Card (online)"
               : paymentMethod === PaymentMethod.TWINT
-              ? "TWINT (pay at pickup/delivery)"
+              ? "TWINT"
               : paymentMethod === PaymentMethod.POS_CARD
-              ? "POS Card (in-store terminal)"
+              ? "POS Card"
               : "Cash"
           }
         />
@@ -422,7 +406,6 @@ export default function CheckoutPage() {
     </Paper>
   );
 
-  // Step 1: Details (and choose payment method)
   if (!clientSecret) {
     return (
       <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
@@ -524,7 +507,6 @@ export default function CheckoutPage() {
               />
             </Box>
 
-            {/* Payment method selector */}
             <Typography sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}>
               Payment method
             </Typography>
@@ -548,21 +530,13 @@ export default function CheckoutPage() {
 
             {paymentMethod !== PaymentMethod.CARD && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                You’ll pay with {paymentMethod.replace("_", " ").toLowerCase()}{" "}
-                at pickup or upon delivery.
+                You will pay at pickup or upon delivery.
               </Alert>
             )}
 
             {orderType === "DELIVERY" && !canDeliver && (
               <Alert severity="error" sx={{ mt: 2 }}>
-                We currently don’t deliver to this address.
-              </Alert>
-            )}
-
-            {/* Hours warning */}
-            {blockedByHours && hoursMsg && (
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                {hoursMsg}
+                We currently do not deliver to this address.
               </Alert>
             )}
 
@@ -588,8 +562,7 @@ export default function CheckoutPage() {
                 disabled={
                   preparing ||
                   (orderType === "DELIVERY" && !canDeliver) ||
-                  minDeliveryNotMet ||
-                  blockedByHours
+                  minDeliveryNotMet
                 }
                 sx={{
                   bgcolor: AK_GOLD,
@@ -600,10 +573,10 @@ export default function CheckoutPage() {
               >
                 {paymentMethod === PaymentMethod.CARD
                   ? preparing
-                    ? "Preparing…"
+                    ? "Preparing..."
                     : "Continue to payment"
                   : preparing
-                  ? "Placing order…"
+                  ? "Placing order..."
                   : "Place order"}
               </Button>
             </Box>
@@ -615,7 +588,6 @@ export default function CheckoutPage() {
     );
   }
 
-  // Step 2: Payment (CARD only)
   return (
     <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
       <Elements stripe={stripePromise} options={{ clientSecret }}>
@@ -624,8 +596,6 @@ export default function CheckoutPage() {
     </Box>
   );
 }
-
-/* ------------------------ tiny UI helper ------------------------ */
 
 function Row({
   label,
