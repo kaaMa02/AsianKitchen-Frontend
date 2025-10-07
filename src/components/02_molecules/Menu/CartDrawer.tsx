@@ -15,7 +15,7 @@ import { OrderType } from '../../../types/api-types';
 
 type Props = { open: boolean; onClose: () => void };
 
-const MIN_TOTAL = 20;
+const MIN_TOTAL = 30;
 
 export default function CartDrawer({ open, onClose }: Props) {
   const nav = useNavigate();
