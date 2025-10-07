@@ -115,6 +115,7 @@ export default function BuffetOrdersAdminPage() {
             const id = String(o.id);
             const canPrint =
               o.paymentStatus === "SUCCEEDED" ||
+              o.paymentStatus === "NOT_REQUIRED" ||
               o.paymentMethod === "CASH" ||
               o.paymentMethod === "TWINT" ||
               o.paymentMethod === "POS_CARD";

@@ -9,6 +9,7 @@ export enum PaymentStatus {
   REQUIRES_PAYMENT_METHOD = "REQUIRES_PAYMENT_METHOD",
   SUCCEEDED = "SUCCEEDED",
   FAILED = "FAILED",
+  NOT_REQUIRED = "NOT_REQUIRED"
 }
 
 export enum PaymentMethod {

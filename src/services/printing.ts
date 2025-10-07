@@ -145,9 +145,12 @@ export async function autoPrintNewPaid(
   rows: CustomerOrderReadDTO[]
 ): Promise<void> {
   const printed = loadPrintedSet();
+
   for (const o of rows) {
     const id = String(o.id);
-    if (isImmediatePrint(o) && !printed.has(id)) {
+    const paidOrNoStripe =
+      o.paymentStatus === "SUCCEEDED" || o.paymentStatus === "NOT_REQUIRED"; // <-- add this
+    if (paidOrNoStripe && !printed.has(id)) {
       try {
         await printCustomerOrderReceipt(o);
         printed.add(id);
@@ -158,3 +161,4 @@ export async function autoPrintNewPaid(
   }
   savePrintedSet(printed);
 }
+

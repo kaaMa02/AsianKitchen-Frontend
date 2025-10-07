@@ -12,18 +12,22 @@ import {
   Alert,
   Paper,
   Divider,
+  ToggleButton,
+  ToggleButtonGroup,
+  Chip,
 } from "@mui/material";
 import TextField from "@mui/material/TextField";
 
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
-import {
-  type OrderType,
-  type BuffetOrderWriteDTO,
-  type CustomerOrderWriteDTO,
-  type CustomerInfoDTO,
-  PaymentMethod,
+import type {
+  OrderType,
+  BuffetOrderWriteDTO,
+  CustomerOrderWriteDTO,
+  CustomerInfoDTO,
+  PaymentMethod as PaymentMethodType,
 } from "../../../types/api-types";
+import { PaymentMethod } from "../../../types/api-types";
 import { createBuffetOrder } from "../../../services/buffetOrders";
 import { createCustomerOrder } from "../../../services/customerOrders";
 import {
@@ -131,11 +135,12 @@ export default function CheckoutPage() {
 
   // client preview amounts (server recomputes on PI create)
   const orderType: OrderType = state.orderType;
-  const itemsSubtotal = Number.isFinite(cartTotalFromCtx) ? (cartTotalFromCtx as number) : 0;
+  const itemsSubtotal = Number.isFinite(cartTotalFromCtx)
+    ? (cartTotalFromCtx as number)
+    : 0;
   const vat = +(itemsSubtotal * 0.026).toFixed(2); // 2.6% VAT
   const deliveryFee = calcDeliveryFee(orderType, itemsSubtotal);
   const grand = +(itemsSubtotal + vat + deliveryFee).toFixed(2);
-  const paymentMethod: PaymentMethod = PaymentMethod.CARD;
 
   // form state
   const [clientSecret, setClientSecret] = React.useState<string>();
@@ -144,6 +149,11 @@ export default function CheckoutPage() {
   const [customer, setCustomer] =
     React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
+
+  // NEW: selected payment method (default to CARD)
+  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
+    PaymentMethod.CARD
+  );
 
   // normalize cart lines
   const cartLines = React.useMemo(() => {
@@ -220,13 +230,20 @@ export default function CheckoutPage() {
 
   // client PLZ gate (mirror backend)
   const allowedPlz = new Set([
-    "4600", "4601", "4609", "4612", "4613", "4622", "4623", "4632",
+    "4600",
+    "4601",
+    "4609",
+    "4612",
+    "4613",
+    "4622",
+    "4623",
+    "4632",
   ]);
   const canDeliver =
     orderType !== "DELIVERY" ||
     (customer.address.plz && allowedPlz.has(customer.address.plz.trim()));
 
-  // create order + PI
+  // create order (+ optionally PI)
   const preparePayment = async () => {
     try {
       setError(undefined);
@@ -240,7 +257,9 @@ export default function CheckoutPage() {
       const hasMenu = cartLines.some((l) => l.kind === "MENU");
       const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
       if (hasMenu && hasBuffet) {
-        setError("Mixed cart (menu + buffet) is not supported yet. Please order them separately.");
+        setError(
+          "Mixed cart (menu + buffet) is not supported yet. Please order them separately."
+        );
         return;
       }
 
@@ -259,6 +278,8 @@ export default function CheckoutPage() {
       setPreparing(true);
       await ensureCsrf();
 
+      // Branch on payment method:
+      // CARD -> Stripe PI flow; others -> create order and finish (no PI)
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
           userId: undefined,
@@ -269,11 +290,17 @@ export default function CheckoutPage() {
             menuItemId: l.id,
             quantity: l.quantity,
           })),
-          paymentMethod,
+          paymentMethod, // <-- NEW
         };
         const order = await createCustomerOrder(payload);
-        const pi = await createIntentForCustomerOrder(order.id);
-        setClientSecret(pi.clientSecret);
+
+        if (paymentMethod === PaymentMethod.CARD) {
+          const pi = await createIntentForCustomerOrder(order.id);
+          setClientSecret(pi.clientSecret);
+        } else {
+          // offline/other method: order created -> finish
+          window.location.href = "/thank-you";
+        }
       } else {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
@@ -284,15 +311,22 @@ export default function CheckoutPage() {
             buffetItemId: l.id,
             quantity: l.quantity,
           })),
-          paymentMethod,
+          paymentMethod, // <-- NEW
         };
         const order = await createBuffetOrder(payload);
-        const pi = await createIntentForBuffetOrder(order.id);
-        setClientSecret(pi.clientSecret);
+
+        if (paymentMethod === PaymentMethod.CARD) {
+          const pi = await createIntentForBuffetOrder(order.id);
+          setClientSecret(pi.clientSecret);
+        } else {
+          window.location.href = "/thank-you";
+        }
       }
     } catch (e: any) {
       console.error(e);
-      const details = e?.response?.data?.details as Record<string, string> | undefined;
+      const details = e?.response?.data?.details as
+        | Record<string, string>
+        | undefined;
       if (details) {
         applyBackendErrors(details);
         setError("Please correct the highlighted fields.");
@@ -328,12 +362,31 @@ export default function CheckoutPage() {
 
         <Divider sx={{ my: 1 }} />
 
-        <Row label={<strong>Total</strong>} value={<strong>{money(grand)}</strong>} />
+        <Row
+          label={<strong>Total</strong>}
+          value={<strong>{money(grand)}</strong>}
+        />
+      </Box>
+
+      {/* Small hint about method */}
+      <Box sx={{ mt: 1.5 }}>
+        <Chip
+          size="small"
+          label={
+            paymentMethod === PaymentMethod.CARD
+              ? "Card (online)"
+              : paymentMethod === PaymentMethod.TWINT
+              ? "TWINT (pay at pickup/delivery)"
+              : paymentMethod === PaymentMethod.POS_CARD
+              ? "POS Card (in-store terminal)"
+              : "Cash"
+          }
+        />
       </Box>
     </Paper>
   );
 
-  // Step 1: Details
+  // Step 1: Details (and choose payment method)
   if (!clientSecret) {
     return (
       <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
@@ -353,7 +406,10 @@ export default function CheckoutPage() {
               bgcolor: CARD_BG,
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, color: AK_DARK }}>
+            <Typography
+              variant="h6"
+              sx={{ mb: 2, fontWeight: 800, color: AK_DARK }}
+            >
               Your details
             </Typography>
 
@@ -364,31 +420,102 @@ export default function CheckoutPage() {
                 gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
               }}
             >
-              <TextField label="First name" fullWidth value={customer.firstName}
-                onChange={handleInput("firstName")} error={!!fieldErrors.firstName}
-                helperText={fieldErrors.firstName} />
-              <TextField label="Last name" fullWidth value={customer.lastName}
-                onChange={handleInput("lastName")} error={!!fieldErrors.lastName}
-                helperText={fieldErrors.lastName} />
-              <TextField label="Email" type="email" fullWidth value={customer.email}
-                onChange={handleInput("email")} error={!!fieldErrors.email}
-                helperText={fieldErrors.email} />
-              <TextField label="Phone" fullWidth value={customer.phone}
-                onChange={handleInput("phone")} error={!!fieldErrors.phone}
-                helperText={fieldErrors.phone} />
-              <TextField label="Street" fullWidth value={customer.address.street}
-                onChange={handleInput("address.street")} error={!!fieldErrors["address.street"]}
-                helperText={fieldErrors["address.street"]} sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }} />
-              <TextField label="No." fullWidth value={customer.address.streetNo}
-                onChange={handleInput("address.streetNo")} error={!!fieldErrors["address.streetNo"]}
-                helperText={fieldErrors["address.streetNo"]} />
-              <TextField label="PLZ" fullWidth value={customer.address.plz}
-                onChange={handleInput("address.plz")} error={!!fieldErrors["address.plz"]}
-                helperText={fieldErrors["address.plz"]} />
-              <TextField label="City" fullWidth value={customer.address.city}
-                onChange={handleInput("address.city")} error={!!fieldErrors["address.city"]}
-                helperText={fieldErrors["address.city"]} />
+              <TextField
+                label="First name"
+                fullWidth
+                value={customer.firstName}
+                onChange={handleInput("firstName")}
+                error={!!fieldErrors.firstName}
+                helperText={fieldErrors.firstName}
+              />
+              <TextField
+                label="Last name"
+                fullWidth
+                value={customer.lastName}
+                onChange={handleInput("lastName")}
+                error={!!fieldErrors.lastName}
+                helperText={fieldErrors.lastName}
+              />
+              <TextField
+                label="Email"
+                type="email"
+                fullWidth
+                value={customer.email}
+                onChange={handleInput("email")}
+                error={!!fieldErrors.email}
+                helperText={fieldErrors.email}
+              />
+              <TextField
+                label="Phone"
+                fullWidth
+                value={customer.phone}
+                onChange={handleInput("phone")}
+                error={!!fieldErrors.phone}
+                helperText={fieldErrors.phone}
+              />
+              <TextField
+                label="Street"
+                fullWidth
+                value={customer.address.street}
+                onChange={handleInput("address.street")}
+                error={!!fieldErrors["address.street"]}
+                helperText={fieldErrors["address.street"]}
+                sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
+              />
+              <TextField
+                label="No."
+                fullWidth
+                value={customer.address.streetNo}
+                onChange={handleInput("address.streetNo")}
+                error={!!fieldErrors["address.streetNo"]}
+                helperText={fieldErrors["address.streetNo"]}
+              />
+              <TextField
+                label="PLZ"
+                fullWidth
+                value={customer.address.plz}
+                onChange={handleInput("address.plz")}
+                error={!!fieldErrors["address.plz"]}
+                helperText={fieldErrors["address.plz"]}
+              />
+              <TextField
+                label="City"
+                fullWidth
+                value={customer.address.city}
+                onChange={handleInput("address.city")}
+                error={!!fieldErrors["address.city"]}
+                helperText={fieldErrors["address.city"]}
+              />
             </Box>
+
+            {/* Payment method selector */}
+            <Typography sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}>
+              Payment method
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              value={paymentMethod}
+              onChange={(_, val) => {
+                if (val) setPaymentMethod(val as PaymentMethodType);
+              }}
+              sx={{ flexWrap: "wrap", gap: 1 }}
+            >
+              <ToggleButton value={PaymentMethod.CARD}>
+                Card (online)
+              </ToggleButton>
+              <ToggleButton value={PaymentMethod.TWINT}>TWINT</ToggleButton>
+              <ToggleButton value={PaymentMethod.POS_CARD}>
+                POS Card
+              </ToggleButton>
+              <ToggleButton value={PaymentMethod.CASH}>Cash</ToggleButton>
+            </ToggleButtonGroup>
+
+            {paymentMethod !== PaymentMethod.CARD && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                You’ll pay with {paymentMethod.replace("_", " ").toLowerCase()}{" "}
+                at pickup or upon delivery.
+              </Alert>
+            )}
 
             {orderType === "DELIVERY" && !canDeliver && (
               <Alert severity="error" sx={{ mt: 2 }}>
@@ -409,7 +536,9 @@ export default function CheckoutPage() {
               <Button
                 variant="contained"
                 onClick={preparePayment}
-                disabled={preparing || (orderType === "DELIVERY" && !canDeliver)}
+                disabled={
+                  preparing || (orderType === "DELIVERY" && !canDeliver)
+                }
                 sx={{
                   bgcolor: AK_GOLD,
                   color: AK_DARK,
@@ -417,7 +546,13 @@ export default function CheckoutPage() {
                   "&:hover": { bgcolor: "#E2B437" },
                 }}
               >
-                {preparing ? "Preparing…" : "Continue to payment"}
+                {paymentMethod === PaymentMethod.CARD
+                  ? preparing
+                    ? "Preparing…"
+                    : "Continue to payment"
+                  : preparing
+                  ? "Placing order…"
+                  : "Place order"}
               </Button>
             </Box>
           </Paper>
@@ -428,7 +563,7 @@ export default function CheckoutPage() {
     );
   }
 
-  // Step 2: Payment
+  // Step 2: Payment (CARD only)
   return (
     <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
       <Elements stripe={stripePromise} options={{ clientSecret }}>
