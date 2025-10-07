@@ -389,8 +389,6 @@ export default function CheckoutPage() {
               ? "Card (online)"
               : paymentMethod === PaymentMethod.TWINT
               ? "TWINT (pay at pickup/delivery)"
-              : paymentMethod === PaymentMethod.POS_CARD
-              ? "POS Card (in-store terminal)"
               : "Cash"
           }
         />
