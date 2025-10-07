@@ -13,16 +13,11 @@ import {
   FormControl,
   SelectChangeEvent,
   IconButton,
-  Stack,
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
 
 import { notifyError, notifySuccess } from "../../../services/toast";
-import {
-  CustomerOrderReadDTO,
-  OrderStatus,
-  PaymentMethod,
-} from "../../../types/api-types";
+import { CustomerOrderReadDTO, OrderStatus } from "../../../types/api-types";
 import {
   listAllCustomerOrders,
   updateCustomerOrderStatus,
@@ -30,8 +25,7 @@ import {
 import { useAdminAlerts } from "../../../contexts/AdminAlertsContext";
 import {
   printCustomerOrderReceipt,
-  autoPrintNewPaidMenu,
-  canPrintNow,
+  autoPrintNewPaid,
 } from "../../../services/printing";
 
 const AK_DARK = "#0B2D24";
@@ -53,7 +47,8 @@ export default function CustomerOrdersAdminPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listAllCustomerOrders(); // includes SUCCEEDED + CASH
+      // backend returns paid (Stripe SUCCEEDED) + cash/twint/POS according to your new controller
+      const data = await listAllCustomerOrders();
       setRows(data ?? []);
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to load orders");
@@ -68,8 +63,9 @@ export default function CustomerOrdersAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Best-effort auto print of newly-paid orders (once per order id)
   React.useEffect(() => {
-    if (rows.length) void autoPrintNewPaidMenu(rows);
+    if (rows.length) void autoPrintNewPaid(rows);
   }, [rows]);
 
   const onChangeStatus = async (id: string, next: OrderStatus) => {
@@ -87,21 +83,6 @@ export default function CustomerOrdersAdminPage() {
       setSavingId(null);
     }
   };
-
-  const renderPaymentChips = (o: CustomerOrderReadDTO) => (
-    <Stack direction="row" spacing={0.5}>
-      <Chip
-        label={o.paymentMethod ?? "—"}
-        size="small"
-        color={o.paymentMethod === PaymentMethod.CASH ? "warning" : "default"}
-      />
-      <Chip
-        label={o.paymentStatus ?? "N/A"}
-        size="small"
-        color={o.paymentStatus === "SUCCEEDED" ? "success" : "default"}
-      />
-    </Stack>
-  );
 
   return (
     <Paper
@@ -134,7 +115,12 @@ export default function CustomerOrdersAdminPage() {
 
           {rows.map((o) => {
             const id = String(o.id);
-            const printEnabled = canPrintNow(o);
+            const canPrint =
+              o.paymentStatus === "SUCCEEDED" ||
+              o.paymentMethod === "CASH" ||
+              o.paymentMethod === "TWINT" ||
+              o.paymentMethod === "POS_CARD";
+
             return (
               <TableRow key={id}>
                 <TableCell>
@@ -150,7 +136,17 @@ export default function CustomerOrdersAdminPage() {
                 <TableCell>
                   <Chip label={o.status} size="small" />
                 </TableCell>
-                <TableCell>{renderPaymentChips(o)}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={
+                      o.paymentMethod
+                        ? `${o.paymentMethod}${o.paymentStatus ? ` · ${o.paymentStatus}` : ""}`
+                        : o.paymentStatus || "N/A"
+                    }
+                    size="small"
+                    color={canPrint ? "success" : "default"}
+                  />
+                </TableCell>
                 <TableCell align="right">
                   <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
                     <Select
@@ -174,11 +170,9 @@ export default function CustomerOrdersAdminPage() {
                     aria-label="Print receipt"
                     size="small"
                     onClick={() => printCustomerOrderReceipt(o)}
-                    disabled={!printEnabled}
+                    disabled={!canPrint}
                     title={
-                      printEnabled
-                        ? "Print receipt"
-                        : "Print is enabled after payment"
+                      canPrint ? "Print receipt" : "Print enabled after payment"
                     }
                   >
                     <PrintIcon fontSize="small" />

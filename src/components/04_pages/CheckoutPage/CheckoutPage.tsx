@@ -17,11 +17,12 @@ import TextField from "@mui/material/TextField";
 
 import { useCart } from "../../../contexts/CartContext";
 import { useNavigate } from "react-router-dom";
-import type {
-  OrderType,
-  BuffetOrderWriteDTO,
-  CustomerOrderWriteDTO,
-  CustomerInfoDTO,
+import {
+  type OrderType,
+  type BuffetOrderWriteDTO,
+  type CustomerOrderWriteDTO,
+  type CustomerInfoDTO,
+  PaymentMethod,
 } from "../../../types/api-types";
 import { createBuffetOrder } from "../../../services/buffetOrders";
 import { createCustomerOrder } from "../../../services/customerOrders";
@@ -134,6 +135,7 @@ export default function CheckoutPage() {
   const vat = +(itemsSubtotal * 0.026).toFixed(2); // 2.6% VAT
   const deliveryFee = calcDeliveryFee(orderType, itemsSubtotal);
   const grand = +(itemsSubtotal + vat + deliveryFee).toFixed(2);
+  const paymentMethod: PaymentMethod = PaymentMethod.CARD;
 
   // form state
   const [clientSecret, setClientSecret] = React.useState<string>();
@@ -267,6 +269,7 @@ export default function CheckoutPage() {
             menuItemId: l.id,
             quantity: l.quantity,
           })),
+          paymentMethod,
         };
         const order = await createCustomerOrder(payload);
         const pi = await createIntentForCustomerOrder(order.id);
@@ -281,6 +284,7 @@ export default function CheckoutPage() {
             buffetItemId: l.id,
             quantity: l.quantity,
           })),
+          paymentMethod,
         };
         const order = await createBuffetOrder(payload);
         const pi = await createIntentForBuffetOrder(order.id);
