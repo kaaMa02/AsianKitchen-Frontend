@@ -53,12 +53,10 @@ const emptyCustomer: CustomerInfoDTO = {
   address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-// delivery fee rule: > 25 & < 50 => 3; > 50 => 5; else 0
+// NEW: Delivery fee rule -> 5 CHF under 100; free at/above 100
 function calcDeliveryFee(orderType: OrderType, subtotal: number) {
   if (orderType !== "DELIVERY") return 0;
-  if (subtotal > 50) return 5;
-  if (subtotal > 25 && subtotal < 50) return 3;
-  return 0;
+  return subtotal >= 100 ? 0 : 5;
 }
 
 function money(n: number) {
@@ -142,6 +140,9 @@ export default function CheckoutPage() {
   const deliveryFee = calcDeliveryFee(orderType, itemsSubtotal);
   const grand = +(itemsSubtotal + vat + deliveryFee).toFixed(2);
 
+  // NEW: UI minimum for DELIVERY (CHF 30)
+  const minDeliveryNotMet = orderType === "DELIVERY" && itemsSubtotal < 30;
+
   // form state
   const [clientSecret, setClientSecret] = React.useState<string>();
   const [error, setError] = React.useState<string>();
@@ -150,7 +151,7 @@ export default function CheckoutPage() {
     React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
 
-  // NEW: selected payment method (default to CARD)
+  // payment method (default to CARD)
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
     PaymentMethod.CARD
   );
@@ -275,6 +276,11 @@ export default function CheckoutPage() {
         return;
       }
 
+      if (minDeliveryNotMet) {
+        setError("Minimum delivery order is CHF 30.00.");
+        return;
+      }
+
       setPreparing(true);
       await ensureCsrf();
 
@@ -290,7 +296,7 @@ export default function CheckoutPage() {
             menuItemId: l.id,
             quantity: l.quantity,
           })),
-          paymentMethod, // <-- NEW
+          paymentMethod,
         };
         const order = await createCustomerOrder(payload);
 
@@ -298,7 +304,6 @@ export default function CheckoutPage() {
           const pi = await createIntentForCustomerOrder(order.id);
           setClientSecret(pi.clientSecret);
         } else {
-          // offline/other method: order created -> finish
           window.location.href = "/thank-you";
         }
       } else {
@@ -311,7 +316,7 @@ export default function CheckoutPage() {
             buffetItemId: l.id,
             quantity: l.quantity,
           })),
-          paymentMethod, // <-- NEW
+          paymentMethod,
         };
         const order = await createBuffetOrder(payload);
 
@@ -358,7 +363,14 @@ export default function CheckoutPage() {
       <Box sx={{ display: "grid", gap: 1.25 }}>
         <Row label="Subtotal" value={money(itemsSubtotal)} />
         <Row label="VAT (2.6%)" value={money(vat)} />
-        <Row label="Delivery fee" value={money(deliveryFee)} />
+        <Row
+          label="Delivery fee"
+          value={
+            orderType === "DELIVERY" && itemsSubtotal >= 100
+              ? "CHF 0.00 (free ≥ CHF 100)"
+              : money(deliveryFee)
+          }
+        />
 
         <Divider sx={{ my: 1 }} />
 
@@ -523,6 +535,12 @@ export default function CheckoutPage() {
               </Alert>
             )}
 
+            {minDeliveryNotMet && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Minimum delivery order is CHF 30.00.
+              </Alert>
+            )}
+
             {error && (
               <Alert severity="error" sx={{ mt: 2 }}>
                 {error}
@@ -537,7 +555,9 @@ export default function CheckoutPage() {
                 variant="contained"
                 onClick={preparePayment}
                 disabled={
-                  preparing || (orderType === "DELIVERY" && !canDeliver)
+                  preparing ||
+                  (orderType === "DELIVERY" && !canDeliver) ||
+                  minDeliveryNotMet
                 }
                 sx={{
                   bgcolor: AK_GOLD,

@@ -1,4 +1,3 @@
-// src/components/03_organisms/Menu/BuffetList.tsx
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';

@@ -1,1 +1,42 @@
-export { chf, MIN_ORDER_CENTS, toCents, formatChf, categoryLabel } from './format';
+import { MenuItemCategory } from '../types/api-types';
+
+/** Format to "CHF 0.00" (defensive about input). */
+export const formatChf = (raw: string | number): string => {
+  const n = Number(String(raw).replace(',', '.'));
+  return Number.isFinite(n) ? `CHF ${n.toFixed(2)}` : `CHF ${String(raw)}`;
+};
+
+/** Convert user-entered price into integer cents. */
+export const toCents = (s: string | number): number => {
+  const n = Number(String(s).replace(',', '.'));
+  return Math.round((Number.isFinite(n) ? n : 0) * 100);
+};
+
+/** Convert integer cents to a CHF string. */
+export const chf = (cents: number): string => `CHF ${(cents / 100).toFixed(2)}`;
+
+/** Human labels for menu categories (UI) */
+const LABELS: Record<MenuItemCategory, string> = {
+  SUSHI_STARTER: 'Sushi Starter',
+  SUSHI_ROLLS: 'Sushi Rolls',
+  HOSO_MAKI: 'Hoso Maki',
+  NIGIRI: 'Nigiri',
+  TEMAKI: 'Temaki',
+  SUSHI_PLATTEN: 'Sushi Platten',
+  BOWLS: 'Bowls',
+  DONBURI: 'Donburi',
+  RAMEN_NOODLE: 'Ramen & Noodle',
+  THAI_STARTER: 'Thai Starter',
+  THAI_SUPPE: 'Thai Suppe',
+  THAI_NOODLES: 'Thai Noodles',
+  THAI_CURRY: 'Thai Curry',
+  THAI_WOK: 'Thai Wok',
+  SIDES: 'Sides',
+  DESSERT: 'Dessert',
+  DRINK: 'Drink',
+};
+
+export const categoryLabel = (c: MenuItemCategory): string => LABELS[c] ?? c;
+
+/** Delivery-only minimum (CHF 30.00) */
+export const MIN_DELIVERY_ORDER_CENTS = 3000;

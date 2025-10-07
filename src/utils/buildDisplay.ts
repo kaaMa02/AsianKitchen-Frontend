@@ -5,7 +5,7 @@ import {
   BuffetItemReadDTO,
   MenuItemCategory,
 } from '../types/api-types';
-import { categoryLabel, formatChf } from './format';
+import { categoryLabel, formatChf } from './money';
 
 export function buildMenuDisplay(
   menu: MenuItemDTO[],
