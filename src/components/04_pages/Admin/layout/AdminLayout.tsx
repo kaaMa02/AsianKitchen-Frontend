@@ -45,6 +45,7 @@ export default function AdminLayout() {
 
   const links: LinkDef[] = [
     { to: "/admin", label: "Dashboard", icon: <DashboardIcon /> },
+    { to: "/admin/discounts", label: "Discounts", icon: <LocalOfferIcon /> },
     {
       to: "/admin/reservations",
       label: "Reservations",
@@ -75,15 +76,6 @@ export default function AdminLayout() {
       label: "Restaurant Info",
       icon: <StoreIcon />,
     },
-
-    // ---------- NEW MENU ITEM ----------
-    {
-      to: "/admin/discounts",
-      label: "Discounts",
-      icon: <LocalOfferIcon />,
-    },
-    // -----------------------------------
-
     { to: "/admin/users", label: "Users", icon: <PeopleIcon /> },
   ];
 

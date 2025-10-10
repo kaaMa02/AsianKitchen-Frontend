@@ -61,6 +61,7 @@ export default function App() {
             }
           >
             <Route index element={<AdminDashboardPage />} />
+            <Route path="/admin/discounts" element={<DiscountsPage />} />
             <Route path="reservations" element={<ReservationsAdminPage />} />
             <Route path="orders" element={<OrdersAdminPage />} />
             <Route path="buffet-orders" element={<BuffetOrdersAdminPage />} />
@@ -73,7 +74,6 @@ export default function App() {
             />
             <Route path="users" element={<UsersAdminPage />} />
           </Route>
-          <Route path="/admin/discounts" element={<DiscountsPage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
