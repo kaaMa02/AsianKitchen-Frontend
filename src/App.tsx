@@ -25,6 +25,7 @@ import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage
 
 import { bootstrapCsrf } from "./services/http";
 import { AdminAlertsProvider } from "./contexts/AdminAlertsContext";
+import DiscountsPage from "./components/04_pages/Admin/DiscountsPage";
 
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
@@ -72,7 +73,7 @@ export default function App() {
             />
             <Route path="users" element={<UsersAdminPage />} />
           </Route>
-
+          <Route path="/admin/discounts" element={<DiscountsPage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

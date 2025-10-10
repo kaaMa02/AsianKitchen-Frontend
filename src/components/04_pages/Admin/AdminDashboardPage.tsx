@@ -47,6 +47,16 @@ export default function AdminDashboard() {
       to: "/admin/restaurant-info",
       description: "Address, hours, delivery rules.",
     },
+
+    // ---------- NEW DASHBOARD CARD ----------
+    {
+      title: "Discounts",
+      to: "/admin/discounts",
+      description:
+        "Enable/disable sale and set % off for Menu or Buffet.",
+    },
+    // ---------------------------------------
+
     {
       title: "Users",
       to: "/admin/users",

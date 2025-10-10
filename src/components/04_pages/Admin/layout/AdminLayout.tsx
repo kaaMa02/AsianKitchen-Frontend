@@ -23,6 +23,7 @@ import SetMealIcon from "@mui/icons-material/SetMeal";
 import LunchDiningIcon from "@mui/icons-material/LunchDining";
 import StoreIcon from "@mui/icons-material/Store";
 import PeopleIcon from "@mui/icons-material/People";
+import LocalOfferIcon from "@mui/icons-material/LocalOffer"; // <-- NEW
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
 
@@ -74,6 +75,15 @@ export default function AdminLayout() {
       label: "Restaurant Info",
       icon: <StoreIcon />,
     },
+
+    // ---------- NEW MENU ITEM ----------
+    {
+      to: "/admin/discounts",
+      label: "Discounts",
+      icon: <LocalOfferIcon />,
+    },
+    // -----------------------------------
+
     { to: "/admin/users", label: "Users", icon: <PeopleIcon /> },
   ];
 
@@ -108,7 +118,6 @@ export default function AdminLayout() {
                   l.icon
                 )}
               </ListItemIcon>
-              {/* avoid deprecated primaryTypographyProps */}
               <ListItemText
                 primary={
                   <Typography
