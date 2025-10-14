@@ -17,7 +17,6 @@ function useBell() {
 
   React.useEffect(() => {
     const unlock = () => {
-      // warm up
       void audioRef.current?.play().catch(() => {});
       audioRef.current?.pause();
       if (audioRef.current) audioRef.current.currentTime = 0;

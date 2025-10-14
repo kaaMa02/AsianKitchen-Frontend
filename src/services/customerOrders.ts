@@ -14,7 +14,6 @@ export async function listCustomerOrdersByUser(userId: string): Promise<Customer
   const { data } = await http.get<CustomerOrderReadDTO[]>('/api/orders', { params: { userId } });
   return data;
 }
-
 export async function trackCustomerOrder(orderId: string, email: string) {
   const { data } = await http.get<CustomerOrderReadDTO>("/api/orders/track", {
     params: { orderId, email },
