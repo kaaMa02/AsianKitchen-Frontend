@@ -5,7 +5,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 
-// ─────────────────────────── Types & constants ───────────────────────────
+/* ─────────────────────────── Types & constants ─────────────────────────── */
 type Range = { open: string; close: string };
 export type Hours = Record<string, Range[]>; // "Mon".."Sun"
 
@@ -19,29 +19,38 @@ const DAYS: Array<{ key: keyof Hours; label: string }> = [
   { key: "Sun", label: "Sun" },
 ];
 
+const DAY_TO_NUM: Record<string, string> = {
+  Mon: "1", Tue: "2", Wed: "3", Thu: "4", Fri: "5", Sat: "6", Sun: "7",
+};
+
 function emptyHours(): Hours {
   return { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [], Sat: [], Sun: [] };
 }
 
-// ─────────────────────────── Parse / Serialize ───────────────────────────
-/** Parses either your old multiline text or the JSON you pasted earlier. */
+/* ─────────────────────────── Helpers ─────────────────────────── */
+function splitOnce(s: string, delim: string): [string, string] {
+  const i = s.indexOf(delim);
+  if (i === -1) return [s, ""];
+  return [s.slice(0, i), s.slice(i + delim.length)];
+}
+
+/** Parses either JSON (numbers 1..7) or legacy multiline like `Mon: 11:00-14:00, 17:00-22:00`. */
 export function parseAnyOpeningHours(src?: string | null): Hours {
   if (!src) return emptyHours();
   const trimmed = src.trim();
 
-  // JSON like: {"1":[{"open":"11:00","close":"14:00"}], ...}
+  // JSON -> {"1":[{"open":"11:00","close":"14:00"}], ...}
   if (trimmed.startsWith("{")) {
     try {
       const j = JSON.parse(trimmed) as Record<string, { open: string; close: string }[]>;
-      const map: Record<string, keyof Hours> = {
-        "1": "Mon", "2": "Tue", "3": "Wed", "4": "Thu", "5": "Fri", "6": "Sat", "7": "Sun",
-      };
       const out = emptyHours();
-      Object.keys(map).forEach((n) => {
-        out[map[n]] = (j[n] ?? []).map(r => ({
-          open: (r.open || "").slice(0, 5),
-          close: (r.close || "").slice(0, 5),
-        }));
+      (Object.keys(DAY_TO_NUM) as Array<keyof Hours>).forEach((dayKey) => {
+        const num = DAY_TO_NUM[dayKey];
+        const arr = j[num] ?? [];
+        out[dayKey] = arr.map(r => ({
+          open: String(r.open || "").slice(0, 5),
+          close: String(r.close || "").slice(0, 5),
+        })).filter(r => r.open && r.close);
       });
       return out;
     } catch {
@@ -49,23 +58,32 @@ export function parseAnyOpeningHours(src?: string | null): Hours {
     }
   }
 
-  // Multiline example:  Mon: 11:00-14:00, 17:00-23:00
+  // Legacy multiline: "Mon: 11:00-14:00, 17:00-23:00"
   const out = emptyHours();
-  trimmed.split(/\r?\n/).forEach(line => {
-    const [d, times] = line.split(":");
-    const day = (d ?? "").trim().slice(0, 3);
-    const key = DAYS.find(x => x.label === day)?.key;
-    if (!key || !times) return;
-    const ranges = times.split(",").map(s => s.trim()).filter(Boolean);
+  trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(line => {
+    const [left, rightRaw] = splitOnce(line, ":");
+    const day = left.trim().slice(0, 3);
+    const key = (DAYS.find(x => x.label === day)?.key) as keyof Hours | undefined;
+    if (!key) return;
+
+    const right = (rightRaw || "").trim();
+    if (!right || right.toLowerCase().startsWith("(closed)")) {
+      out[key] = [];
+      return;
+    }
+
+    const ranges = right.split(",").map(s => s.trim()).filter(Boolean);
     out[key] = ranges.map(r => {
-      const [o, c] = r.split("-").map(x => (x || "").trim());
-      return { open: (o || "").slice(0, 5), close: (c || "").slice(0, 5) };
+      const norm = r.replace(/–/g, "-"); // en dash → hyphen
+      const [o, c] = splitOnce(norm, "-");
+      return { open: (o || "").trim().slice(0, 5), close: (c || "").trim().slice(0, 5) };
     }).filter(r => r.open && r.close);
   });
+
   return out;
 }
 
-/** Serializes to the same multiline string your backend already stores. */
+/** Serializes to your existing multiline format the backend already stores. */
 export function serializeToMultiline(h: Hours): string {
   return DAYS.map(({ key, label }) => {
     if (!h[key]?.length) return `${label}: (closed)`;
@@ -85,19 +103,26 @@ function validate(h: Hours): string | null {
   return null;
 }
 
-// ─────────────────────────── Component ───────────────────────────
+/* ─────────────────────────── Component ─────────────────────────── */
 export default function OpeningHoursEditor({
   value, onChange,
 }: { value?: string | null; onChange: (multiline: string) => void }) {
   const [hours, setHours] = React.useState<Hours>(() => parseAnyOpeningHours(value));
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => { setHours(parseAnyOpeningHours(value)); }, [value]);
+  // Only re-hydrate local state when the incoming value actually changed (prevents “jumping”)
+  const prevValueRef = React.useRef<string | null | undefined>(undefined);
+  React.useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setHours(parseAnyOpeningHours(value));
+    }
+  }, [value]);
 
   const commit = (next: Hours) => {
     const err = validate(next);
     setError(err);
-    onChange(serializeToMultiline(next));
+    onChange(serializeToMultiline(next)); // keep storing multiline string
   };
 
   const setRange = (day: keyof Hours, idx: number, patch: Partial<Range>) => {
@@ -119,7 +144,7 @@ export default function OpeningHoursEditor({
 
   const removeRange = (day: keyof Hours, idx: number) => {
     setHours(prev => {
-      const arr = [...prev[day]];
+      const arr = prev[day].slice();
       arr.splice(idx, 1);
       const next = { ...prev, [day]: arr };
       commit(next);

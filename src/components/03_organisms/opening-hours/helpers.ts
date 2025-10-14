@@ -2,50 +2,59 @@ export type TimeRange = { open: string; close: string };       // "HH:mm"
 export type OpeningHours = { [day: string]: TimeRange[] };      // "1".."7"
 
 export const DAY_LABELS: Record<string, string> = {
-  "1": "Mon",
-  "2": "Tue",
-  "3": "Wed",
-  "4": "Thu",
-  "5": "Fri",
-  "6": "Sat",
-  "7": "Sun",
+  "1": "Mon", "2": "Tue", "3": "Wed", "4": "Thu", "5": "Fri", "6": "Sat", "7": "Sun",
 };
 
 const EMPTY: OpeningHours = { "1": [], "2": [], "3": [], "4": [], "5": [], "6": [], "7": [] };
 
-export function parseOpeningHours(json?: string | null): OpeningHours {
-  if (!json) return { ...EMPTY };
-  // if it looks like JSON -> parse, else try to interpret legacy "Mon: 11:00–14:00, 17:00–22:00"
-  const trimmed = json.trim();
+function splitOnce(s: string, delim: string): [string, string] {
+  const i = s.indexOf(delim);
+  if (i === -1) return [s, ""];
+  return [s.slice(0, i), s.slice(i + delim.length)];
+}
+
+export function parseOpeningHours(jsonOrMultiline?: string | null): OpeningHours {
+  if (!jsonOrMultiline) return { ...EMPTY };
+  const trimmed = jsonOrMultiline.trim();
+
+  // JSON (preferred)
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     try {
       const raw = JSON.parse(trimmed) as OpeningHours;
       const norm: OpeningHours = { ...EMPTY };
       for (const d of Object.keys(norm)) {
         norm[d] = (raw?.[d] ?? []).map(r => ({
-          open: (r.open || "").slice(0, 5),
-          close: (r.close || "").slice(0, 5),
-        }));
+          open: String(r.open || "").slice(0, 5),
+          close: String(r.close || "").slice(0, 5),
+        })).filter(r => r.open && r.close);
       }
       return norm;
     } catch {
-      return { ...EMPTY };
+      // fall through
     }
   }
-  // Legacy multiline fallback
-  const map: Record<string, string> = {
+
+  // Legacy multiline fallback (Mon: 11:00-14:00, 17:00-22:00)
+  const nameToNum: Record<string, string> = {
     mon: "1", tue: "2", wed: "3", thu: "4", fri: "5", sat: "6", sun: "7",
     monday: "1", tuesday: "2", wednesday: "3", thursday: "4", friday: "5", saturday: "6", sunday: "7",
   };
   const out: OpeningHours = { ...EMPTY };
   trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(line => {
-    const [left, right = ""] = line.split(":");
-    const key = map[left?.toLowerCase()?.replace(/\.$/, "") || ""];
+    const [left, rightRaw] = splitOnce(line, ":");
+    const key = nameToNum[left?.toLowerCase()?.replace(/\.$/, "") || ""];
     if (!key) return;
+
+    const right = (rightRaw || "").trim();
+    if (!right || right.toLowerCase().startsWith("(closed)")) {
+      out[key] = [];
+      return;
+    }
+
     const ranges = right.split(",").map(s => s.trim()).filter(Boolean);
     out[key] = ranges.map(r => {
-      const [o, c] = r.replace("–", "-").split("-").map(s => s.trim());
-      return { open: (o || "").slice(0,5), close: (c || "").slice(0,5) };
+      const [o, c] = splitOnce(r.replace(/–/g, "-"), "-");
+      return { open: (o || "").trim().slice(0,5), close: (c || "").trim().slice(0,5) };
     }).filter(r => r.open && r.close);
   });
   return out;
