@@ -1,3 +1,4 @@
+// ...your existing imports
 import * as React from "react";
 import {
   Elements,
@@ -55,10 +56,7 @@ const emptyCustomer: CustomerInfoDTO = {
   address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-function calcDeliveryFee(
-  orderType: OrderType,
-  discountedItemsSubtotal: number
-) {
+function calcDeliveryFee(orderType: OrderType, discountedItemsSubtotal: number) {
   if (orderType !== "DELIVERY") return 0;
   return discountedItemsSubtotal >= 100 ? 0 : 5;
 }
@@ -92,18 +90,8 @@ function PaymentStep({
   };
 
   return (
-    <Box
-      sx={{
-        display: "grid",
-        gap: 3,
-        gridTemplateColumns: { md: "1fr 420px" },
-        alignItems: "start",
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{ p: 3, borderRadius: 2, border: "1px solid rgba(11,45,36,.12)" }}
-      >
+    <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { md: "1fr 420px" }, alignItems: "start" }}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: "1px solid rgba(11,45,36,.12)" }}>
         <PaymentElement />
         <Button
           disabled={!stripe || submitting}
@@ -144,14 +132,9 @@ export default function CheckoutPage() {
   const hasBuffet = cartLines.some((l) => l.kind === "BUFFET");
 
   const orderType: OrderType = state.orderType;
-  const itemsSubtotal = Number.isFinite(cartTotalFromCtx)
-    ? (cartTotalFromCtx as number)
-    : 0;
+  const itemsSubtotal = Number.isFinite(cartTotalFromCtx) ? (cartTotalFromCtx as number) : 0;
 
-  const [disc, setDisc] = React.useState<{ menu: number; buffet: number }>({
-    menu: 0,
-    buffet: 0,
-  });
+  const [disc, setDisc] = React.useState<{ menu: number; buffet: number }>({ menu: 0, buffet: 0 });
 
   React.useEffect(() => {
     getActiveDiscount()
@@ -177,12 +160,9 @@ export default function CheckoutPage() {
   const [clientSecret, setClientSecret] = React.useState<string>();
   const [error, setError] = React.useState<string>();
   const [preparing, setPreparing] = React.useState(false);
-  const [customer, setCustomer] =
-    React.useState<CustomerInfoDTO>(emptyCustomer);
+  const [customer, setCustomer] = React.useState<CustomerInfoDTO>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
-  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
-    PaymentMethod.CARD
-  );
+  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(PaymentMethod.CARD);
 
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
@@ -198,8 +178,7 @@ export default function CheckoutPage() {
     const req = (v?: string) => !v || !v.trim();
     if (req(c.firstName)) e.firstName = "Required";
     if (req(c.lastName)) e.lastName = "Required";
-    if (req(c.email) || !/.+@.+\..+/.test(c.email))
-      e.email = "Valid email required";
+    if (req(c.email) || !/.+@.+\..+/.test(c.email)) e.email = "Valid email required";
     if (req(c.phone)) e.phone = "Required";
     if (req(c.address.street)) e["address.street"] = "Required";
     if (req(c.address.streetNo)) e["address.streetNo"] = "Required";
@@ -208,51 +187,25 @@ export default function CheckoutPage() {
     return e;
   };
 
-  const handleInput =
-    (path: string) => (ev: React.ChangeEvent<HTMLInputElement>) => {
-      const v = ev.target.value;
-      setCustomer((prev) => {
-        const next = { ...prev, address: { ...prev.address } };
-        switch (path) {
-          case "firstName":
-            next.firstName = v;
-            break;
-          case "lastName":
-            next.lastName = v;
-            break;
-          case "email":
-            next.email = v;
-            break;
-          case "phone":
-            next.phone = v;
-            break;
-          case "address.street":
-            next.address.street = v;
-            break;
-          case "address.streetNo":
-            next.address.streetNo = v;
-            break;
-          case "address.plz":
-            next.address.plz = v;
-            break;
-          case "address.city":
-            next.address.city = v;
-            break;
-        }
-        return next;
-      });
-    };
+  const handleInput = (path: string) => (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const v = ev.target.value;
+    setCustomer((prev) => {
+      const next = { ...prev, address: { ...prev.address } };
+      switch (path) {
+        case "firstName": next.firstName = v; break;
+        case "lastName": next.lastName = v; break;
+        case "email": next.email = v; break;
+        case "phone": next.phone = v; break;
+        case "address.street": next.address.street = v; break;
+        case "address.streetNo": next.address.streetNo = v; break;
+        case "address.plz": next.address.plz = v; break;
+        case "address.city": next.address.city = v; break;
+      }
+      return next;
+    });
+  };
 
-  const allowedPlz = new Set([
-    "4600",
-    "4601",
-    "4609",
-    "4612",
-    "4613",
-    "4622",
-    "4623",
-    "4632",
-  ]);
+  const allowedPlz = new Set(["4600","4601","4609","4612","4613","4622","4623","4632"]);
   const canDeliver =
     orderType !== "DELIVERY" ||
     (customer.address.plz && allowedPlz.has(customer.address.plz.trim()));
@@ -267,9 +220,7 @@ export default function CheckoutPage() {
         return;
       }
       if (hasMenu && hasBuffet) {
-        setError(
-          "Mixed cart (menu + buffet) is not supported yet. Please order them separately."
-        );
+        setError("Mixed cart (menu + buffet) is not supported yet. Please order them separately.");
         return;
       }
       const errs = validate(customer);
@@ -296,10 +247,7 @@ export default function CheckoutPage() {
           customerInfo: customer,
           orderType,
           specialInstructions: undefined,
-          items: cartLines.map((l) => ({
-            menuItemId: l.id,
-            quantity: l.quantity,
-          })),
+          items: cartLines.map((l) => ({ menuItemId: l.id, quantity: l.quantity })),
           paymentMethod,
         };
         const order = await createCustomerOrder(payload);
@@ -315,10 +263,7 @@ export default function CheckoutPage() {
           customerInfo: customer,
           orderType,
           specialInstructions: undefined,
-          items: cartLines.map((l) => ({
-            buffetItemId: l.id,
-            quantity: l.quantity,
-          })),
+          items: cartLines.map((l) => ({ buffetItemId: l.id, quantity: l.quantity })),
           paymentMethod,
         };
         const order = await createBuffetOrder(payload);
@@ -331,9 +276,7 @@ export default function CheckoutPage() {
       }
     } catch (e: any) {
       console.error(e);
-      const details = e?.response?.data?.details as
-        | Record<string, string>
-        | undefined;
+      const details = e?.response?.data?.details as Record<string, string> | undefined;
       if (details) {
         applyBackendErrors(details);
         setError("Please correct the highlighted fields.");
@@ -363,12 +306,7 @@ export default function CheckoutPage() {
 
       <Box sx={{ display: "grid", gap: 1.25 }}>
         <Row label="Items" value={money(itemsSubtotal)} />
-        {percent > 0 && (
-          <Row
-            label={`Discount (${percent}%)`}
-            value={`- ${money(discountAmount)}`}
-          />
-        )}
+        {percent > 0 && <Row label={`Discount (${percent}%)`} value={`- ${money(discountAmount)}`} />}
         <Row label="Items after discount" value={money(discountedItems)} />
         <Row label="VAT (2.6%)" value={money(vat)} />
         <Row
@@ -382,10 +320,7 @@ export default function CheckoutPage() {
 
         <Divider sx={{ my: 1 }} />
 
-        <Row
-          label={<strong>Total</strong>}
-          value={<strong>{money(grand)}</strong>}
-        />
+        <Row label={<strong>Total</strong>} value={<strong>{money(grand)}</strong>} />
       </Box>
 
       <Box sx={{ mt: 1.5, display: "flex", gap: 1, alignItems: "center" }}>
@@ -409,102 +344,24 @@ export default function CheckoutPage() {
   if (!clientSecret) {
     return (
       <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
-        <Box
-          sx={{
-            display: "grid",
-            gap: 3,
-            gridTemplateColumns: { md: "1fr 420px" },
-          }}
-        >
+        <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { md: "1fr 420px" } }}>
           <Paper
             elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              border: "1px solid rgba(11,45,36,.12)",
-              bgcolor: CARD_BG,
-            }}
+            sx={{ p: 3, borderRadius: 3, border: "1px solid rgba(11,45,36,.12)", bgcolor: CARD_BG }}
           >
-            <Typography
-              variant="h6"
-              sx={{ mb: 2, fontWeight: 800, color: AK_DARK }}
-            >
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, color: AK_DARK }}>
               Your details
             </Typography>
 
-            <Box
-              sx={{
-                display: "grid",
-                gap: 2,
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-              }}
-            >
-              <TextField
-                label="First name"
-                fullWidth
-                value={customer.firstName}
-                onChange={handleInput("firstName")}
-                error={!!fieldErrors.firstName}
-                helperText={fieldErrors.firstName}
-              />
-              <TextField
-                label="Last name"
-                fullWidth
-                value={customer.lastName}
-                onChange={handleInput("lastName")}
-                error={!!fieldErrors.lastName}
-                helperText={fieldErrors.lastName}
-              />
-              <TextField
-                label="Email"
-                type="email"
-                fullWidth
-                value={customer.email}
-                onChange={handleInput("email")}
-                error={!!fieldErrors.email}
-                helperText={fieldErrors.email}
-              />
-              <TextField
-                label="Phone"
-                fullWidth
-                value={customer.phone}
-                onChange={handleInput("phone")}
-                error={!!fieldErrors.phone}
-                helperText={fieldErrors.phone}
-              />
-              <TextField
-                label="Street"
-                fullWidth
-                value={customer.address.street}
-                onChange={handleInput("address.street")}
-                error={!!fieldErrors["address.street"]}
-                helperText={fieldErrors["address.street"]}
-                sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}
-              />
-              <TextField
-                label="No."
-                fullWidth
-                value={customer.address.streetNo}
-                onChange={handleInput("address.streetNo")}
-                error={!!fieldErrors["address.streetNo"]}
-                helperText={fieldErrors["address.streetNo"]}
-              />
-              <TextField
-                label="PLZ"
-                fullWidth
-                value={customer.address.plz}
-                onChange={handleInput("address.plz")}
-                error={!!fieldErrors["address.plz"]}
-                helperText={fieldErrors["address.plz"]}
-              />
-              <TextField
-                label="City"
-                fullWidth
-                value={customer.address.city}
-                onChange={handleInput("address.city")}
-                error={!!fieldErrors["address.city"]}
-                helperText={fieldErrors["address.city"]}
-              />
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+              <TextField label="First name" fullWidth value={customer.firstName} onChange={handleInput("firstName")} error={!!fieldErrors.firstName} helperText={fieldErrors.firstName} />
+              <TextField label="Last name" fullWidth value={customer.lastName} onChange={handleInput("lastName")} error={!!fieldErrors.lastName} helperText={fieldErrors.lastName} />
+              <TextField label="Email" type="email" fullWidth value={customer.email} onChange={handleInput("email")} error={!!fieldErrors.email} helperText={fieldErrors.email} />
+              <TextField label="Phone" fullWidth value={customer.phone} onChange={handleInput("phone")} error={!!fieldErrors.phone} helperText={fieldErrors.phone} />
+              <TextField label="Street" fullWidth value={customer.address.street} onChange={handleInput("address.street")} error={!!fieldErrors["address.street"]} helperText={fieldErrors["address.street"]} sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }} />
+              <TextField label="No." fullWidth value={customer.address.streetNo} onChange={handleInput("address.streetNo")} error={!!fieldErrors["address.streetNo"]} helperText={fieldErrors["address.streetNo"]} />
+              <TextField label="PLZ" fullWidth value={customer.address.plz} onChange={handleInput("address.plz")} error={!!fieldErrors["address.plz"]} helperText={fieldErrors["address.plz"]} />
+              <TextField label="City" fullWidth value={customer.address.city} onChange={handleInput("address.city")} error={!!fieldErrors["address.city"]} helperText={fieldErrors["address.city"]} />
             </Box>
 
             <Typography sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}>
@@ -518,13 +375,9 @@ export default function CheckoutPage() {
               }}
               sx={{ flexWrap: "wrap", gap: 1 }}
             >
-              <ToggleButton value={PaymentMethod.CARD}>
-                Card (online)
-              </ToggleButton>
+              <ToggleButton value={PaymentMethod.CARD}>Card (online)</ToggleButton>
               <ToggleButton value={PaymentMethod.TWINT}>TWINT</ToggleButton>
-              <ToggleButton value={PaymentMethod.POS_CARD}>
-                POS Card
-              </ToggleButton>
+              <ToggleButton value={PaymentMethod.POS_CARD}>POS Card</ToggleButton>
               <ToggleButton value={PaymentMethod.CASH}>Cash</ToggleButton>
             </ToggleButtonGroup>
 
@@ -553,17 +406,11 @@ export default function CheckoutPage() {
             )}
 
             <Box sx={{ mt: 2, display: "flex", gap: 1 }}>
-              <Button variant="outlined" onClick={() => navigate("/menu")}>
-                Back to Menu
-              </Button>
+              <Button variant="outlined" onClick={() => navigate("/menu")}>Back to Menu</Button>
               <Button
                 variant="contained"
                 onClick={preparePayment}
-                disabled={
-                  preparing ||
-                  (orderType === "DELIVERY" && !canDeliver) ||
-                  minDeliveryNotMet
-                }
+                disabled={preparing || (orderType === "DELIVERY" && !canDeliver) || minDeliveryNotMet}
                 sx={{
                   bgcolor: AK_GOLD,
                   color: AK_DARK,
@@ -572,12 +419,8 @@ export default function CheckoutPage() {
                 }}
               >
                 {paymentMethod === PaymentMethod.CARD
-                  ? preparing
-                    ? "Preparing..."
-                    : "Continue to payment"
-                  : preparing
-                  ? "Placing order..."
-                  : "Place order"}
+                  ? preparing ? "Preparing..." : "Continue to payment"
+                  : preparing ? "Placing order..." : "Place order"}
               </Button>
             </Box>
           </Paper>
@@ -597,21 +440,11 @@ export default function CheckoutPage() {
   );
 }
 
-function Row({
-  label,
-  value,
-}: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-}) {
+function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
   return (
     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
-      <Typography component="span" sx={{ color: "#0B2D24" }}>
-        {label}
-      </Typography>
-      <Typography component="span" sx={{ color: "#0B2D24" }}>
-        {value}
-      </Typography>
+      <Typography component="span" sx={{ color: "#0B2D24" }}>{label}</Typography>
+      <Typography component="span" sx={{ color: "#0B2D24" }}>{value}</Typography>
     </Box>
   );
 }

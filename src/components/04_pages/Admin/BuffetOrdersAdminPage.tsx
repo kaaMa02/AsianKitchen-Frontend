@@ -38,6 +38,16 @@ const STATUS_OPTIONS: OrderStatus[] = [
   OrderStatus.CANCELLED,
 ];
 
+function prettyPaymentLabel(o: { paymentMethod?: string; paymentStatus?: string }) {
+  const pm = o.paymentMethod;
+  const ps = o.paymentStatus;
+
+  if (pm === "CASH" || pm === "TWINT" || pm === "POS_CARD") return pm || "N/A";
+  if (pm === "CARD") return ps ? `CARD · ${ps}` : "CARD";
+  if (ps && ps !== "NOT_REQUIRED") return ps;
+  return "N/A";
+}
+
 export default function BuffetOrdersAdminPage() {
   const [rows, setRows] = React.useState<BuffetOrderReadDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -47,7 +57,7 @@ export default function BuffetOrdersAdminPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listAllBuffetOrders(); // paid + cash/twint/POS
+      const data = await listAllBuffetOrders();
       setRows(data ?? []);
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to load buffet orders");
@@ -83,10 +93,7 @@ export default function BuffetOrdersAdminPage() {
   };
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
-    >
+    <Paper elevation={0} sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}>
       <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>
         Buffet Orders
       </Typography>
@@ -122,26 +129,14 @@ export default function BuffetOrdersAdminPage() {
 
             return (
               <TableRow key={id}>
-                <TableCell>
-                  {String(o.createdAt).replace("T", " ").slice(0, 16)}
-                </TableCell>
-                <TableCell>
-                  {o.customerInfo?.firstName} {o.customerInfo?.lastName}
-                </TableCell>
+                <TableCell>{String(o.createdAt).replace("T", " ").slice(0, 16)}</TableCell>
+                <TableCell>{o.customerInfo?.firstName} {o.customerInfo?.lastName}</TableCell>
                 <TableCell>{o.orderType}</TableCell>
-                <TableCell>
-                  CHF {Number(o.totalPrice || 0).toFixed(2)}
-                </TableCell>
-                <TableCell>
-                  <Chip label={o.status} size="small" />
-                </TableCell>
+                <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
+                <TableCell><Chip label={o.status} size="small" /></TableCell>
                 <TableCell>
                   <Chip
-                    label={
-                      o.paymentMethod
-                        ? `${o.paymentMethod}${o.paymentStatus ? ` · ${o.paymentStatus}` : ""}`
-                        : o.paymentStatus || "N/A"
-                    }
+                    label={prettyPaymentLabel(o)}
                     size="small"
                     color={canPrint ? "success" : "default"}
                   />
@@ -153,8 +148,7 @@ export default function BuffetOrdersAdminPage() {
                       disabled={savingId === id}
                       onChange={(e: SelectChangeEvent<string>) => {
                         const next = e.target.value as OrderStatus;
-                        if (next && next !== o.status)
-                          void onChangeStatus(id, next);
+                        if (next && next !== o.status) void onChangeStatus(id, next);
                       }}
                     >
                       {STATUS_OPTIONS.map((s) => (
@@ -170,9 +164,7 @@ export default function BuffetOrdersAdminPage() {
                     size="small"
                     onClick={() => printCustomerOrderReceipt(o as any)}
                     disabled={!canPrint}
-                    title={
-                      canPrint ? "Print receipt" : "Print enabled after payment"
-                    }
+                    title={canPrint ? "Print receipt" : "Print enabled after payment"}
                   >
                     <PrintIcon fontSize="small" />
                   </IconButton>
