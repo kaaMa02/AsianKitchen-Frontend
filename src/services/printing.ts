@@ -28,6 +28,23 @@ function wrap(text: string, width: number): string[] {
 
 export function buildCustomerOrderReceipt(o: CustomerOrderReadDTO): string {
   const rows: string[] = [];
+  const COLS = 42;
+  const line = (ch = "-") => ch.repeat(COLS);
+  const padR = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s + " ".repeat(n - s.length));
+  const money = (v: unknown) => `CHF ${Number(v || 0).toFixed(2)}`;
+
+  const wrap = (text: string, width: number): string[] => {
+    const words = String(text).split(/\s+/);
+    const out: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      const next = cur ? cur + " " + w : w;
+      if (next.length <= width) cur = next;
+      else { if (cur) out.push(cur); cur = w.length > width ? w.slice(0, width) : w; }
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
 
   rows.push("ASIAN KITCHEN");
   rows.push(line());
@@ -36,44 +53,52 @@ export function buildCustomerOrderReceipt(o: CustomerOrderReadDTO): string {
   rows.push(`Type:   ${o.orderType}`);
   rows.push(line());
 
-  // Customer / address
   const ci = o.customerInfo;
   rows.push(`${ci?.firstName ?? ""} ${ci?.lastName ?? ""}`.trim());
   if (ci?.phone) rows.push(ci.phone);
   const addr: any = ci?.address as any;
   if (addr?.street) rows.push(`${addr.street} ${addr.streetNo ?? ""}`.trim());
-  if (addr?.plz || addr?.city)
-    rows.push(`${addr?.plz ?? ""} ${addr?.city ?? ""}`.trim());
+  if (addr?.plz || addr?.city) rows.push(`${addr?.plz ?? ""} ${addr?.city ?? ""}`.trim());
   rows.push(line());
 
-  // Items
   rows.push(padR("Item", COLS - 12) + padR("Qty", 4) + "Amount");
   rows.push(line());
 
-  for (const it of (o.orderItems || []) as OrderItemReadDTO[]) {
-    const name =
-      it.menuItemName ?? (it as any).name ?? `#${it.menuItemId ?? ""}`.trim();
+  for (const it of (o.orderItems || []) as any[]) {
+    const name = it.menuItemName ?? it.name ?? `#${it.menuItemId ?? ""}`.trim();
     const qty = it.quantity ?? 1;
-    const unit = (it as any).unitPrice;
-    const total = typeof unit !== "undefined" ? Number(unit) * qty : undefined;
+    const unit = Number(it.unitPrice ?? 0);
+    const total = unit * qty;
 
     const wrapped = wrap(name, COLS - 12);
-    rows.push(
-      padR(wrapped[0], COLS - 12) +
-        padR(String(qty), 4) +
-        (typeof total !== "undefined" ? money(total) : "")
-    );
+    rows.push(padR(wrapped[0], COLS - 12) + padR(String(qty), 4) + money(total));
     for (let i = 1; i < wrapped.length; i++) rows.push(padR(wrapped[i], COLS));
   }
 
+  const pre   = Number(o.itemsSubtotalBeforeDiscount ?? 0);
+  const pct   = Number(o.discountPercent ?? 0);
+  const disc  = Number(o.discountAmount ?? 0);
+  const post  = Number(o.itemsSubtotalAfterDiscount ?? 0);
+  const vat   = Number(o.vatAmount ?? 0);
+  const deliv = Number(o.deliveryFee ?? 0);
+  const grand = Number(o.totalPrice ?? 0);
+
   rows.push(line());
-  rows.push(padR("TOTAL", COLS - 10) + money(o.totalPrice));
+  rows.push(padR("Items", COLS - 10) + money(pre));
+  if (pct > 0) {
+    rows.push(padR(`Discount (${pct}%)`, COLS - 10) + `- ${money(disc)}`);
+    rows.push(padR("Items after discount", COLS - 10) + money(post));
+  }
+  rows.push(padR("VAT (2.6%)", COLS - 10) + money(vat));
+  rows.push(padR("Delivery fee", COLS - 10) + money(deliv));
+  rows.push(line());
+  rows.push(padR("TOTAL", COLS - 10) + money(grand));
+
   if (o.paymentMethod) rows.push(`Method:  ${o.paymentMethod}`);
   if (o.paymentStatus) rows.push(`Payment: ${o.paymentStatus}`);
   rows.push(`Status:  ${o.status}`);
   rows.push(line());
   rows.push("Thank you!");
-  rows.push("");
   rows.push("");
 
   return rows.join("\n");

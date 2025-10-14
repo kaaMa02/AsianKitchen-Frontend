@@ -3,13 +3,12 @@ export type UUID = string;
 export type BigDecimal = string;
 export type LocalDateTime = string;
 
-
 // --- Payments ---
 export enum PaymentStatus {
   REQUIRES_PAYMENT_METHOD = "REQUIRES_PAYMENT_METHOD",
   SUCCEEDED = "SUCCEEDED",
   FAILED = "FAILED",
-  NOT_REQUIRED = "NOT_REQUIRED"
+  NOT_REQUIRED = "NOT_REQUIRED",
 }
 
 export enum PaymentMethod {
@@ -166,6 +165,12 @@ export interface BuffetOrderReadDTO {
   paymentStatus?: PaymentStatus;
   paymentIntentId?: string | null;
   paymentMethod: PaymentMethod;
+  itemsSubtotalBeforeDiscount?: BigDecimal;
+  discountPercent?: BigDecimal;
+  discountAmount?: BigDecimal;
+  itemsSubtotalAfterDiscount?: BigDecimal;
+  vatAmount?: BigDecimal;
+  deliveryFee?: BigDecimal;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,6 +245,12 @@ export interface CustomerOrderReadDTO {
   paymentStatus?: PaymentStatus;
   paymentIntentId?: string | null;
   paymentMethod: PaymentMethod;
+  itemsSubtotalBeforeDiscount?: BigDecimal;
+  discountPercent?: BigDecimal;
+  discountAmount?: BigDecimal;
+  itemsSubtotalAfterDiscount?: BigDecimal;
+  vatAmount?: BigDecimal;
+  deliveryFee?: BigDecimal;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
