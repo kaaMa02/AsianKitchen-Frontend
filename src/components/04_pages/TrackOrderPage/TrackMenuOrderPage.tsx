@@ -1,163 +1,130 @@
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import {
-  Box,
-  Paper,
-  Typography,
-  Chip,
-  Divider,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
+  Paper, Typography, Box, Chip, Divider, Alert, CircularProgress,
 } from "@mui/material";
-import { trackMenuOrder } from "../../../services/tracking";
 import type { CustomerOrderReadDTO } from "../../../types/api-types";
-import OrderStatusStepper from "../../common/OrderStatusStepper";
+import { trackCustomerOrder } from "../../../services/customerOrders";
+
+const AK_DARK = "#0B2D24";
 
 export default function TrackMenuOrderPage() {
+  const [sp] = useSearchParams();
+  const orderId = sp.get("orderId") || "";
+  const email = sp.get("email") || "";
+
   const [data, setData] = React.useState<CustomerOrderReadDTO | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string>();
   const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    const url = new URL(window.location.href);
-    const orderId = url.searchParams.get("orderId") || "";
-    const email = url.searchParams.get("email") || "";
-
+  const load = React.useCallback(async () => {
     if (!orderId || !email) {
-      setError("Missing orderId or email.");
+      setError("Missing orderId or email in the link.");
       setLoading(false);
       return;
     }
+    try {
+      setError(undefined);
+      const res = await trackCustomerOrder(orderId, email);
+      setData(res);
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Could not find your order.");
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId, email]);
 
-    (async () => {
-      try {
-        const d = await trackMenuOrder(orderId, email);
-        setData(d);
-      } catch {
-        setError("Order not found, or email does not match this order.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  React.useEffect(() => {
+    void load();
+    const t = setInterval(load, 15_000); // auto-refresh every 15s
+    return () => clearInterval(t);
+  }, [load]);
 
-  if (loading) return <Box sx={{ p: 3 }}>Loading…</Box>;
-  if (error) return <Box sx={{ p: 3, color: "error.main" }}>{error}</Box>;
+  if (loading) {
+    return (
+      <Box sx={{ p: 3, maxWidth: 800, mx: "auto", textAlign: "center" }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3, maxWidth: 800, mx: "auto" }}>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
   if (!data) return null;
 
-  const items = Array.isArray(data.orderItems) ? data.orderItems : [];
-  const hasUnitPrice = items.some(
-    (oi: any) => typeof oi?.unitPrice !== "undefined"
-  );
-  const hasName = items.some(
-    (oi: any) => typeof oi?.menuItemName !== "undefined"
-  );
-
-  const addr = (data.customerInfo as any)?.address;
-  const isDelivery = data.orderType === "DELIVERY";
-  const hasAddress =
-    isDelivery &&
-    addr &&
-    (addr.street || addr.streetNo || addr.plz || addr.city);
+  const ci = data.customerInfo || ({} as any);
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
-    >
-      <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
+    <Box sx={{ p: 3, maxWidth: 800, mx: "auto" }}>
+      <Typography variant="h5" sx={{ fontWeight: 800, color: AK_DARK, mb: 2 }}>
         Track your order
       </Typography>
 
-      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 2 }}>
-        <Chip label={`Order ID: ${data.id}`} />
-        <Chip
-          label={`Payment: ${data.paymentStatus ?? "N/A"}`}
-          color={data.paymentStatus === "SUCCEEDED" ? "success" : "default"}
-        />
-        <Chip label={`Total: CHF ${Number(data.totalPrice || 0).toFixed(2)}`} />
-        <Chip label={`Type: ${data.orderType}`} />
-        <Chip
-          label={`Placed: ${String(data.createdAt)
-            .replace("T", " ")
-            .slice(0, 16)}`}
-        />
-      </Box>
-
-      <OrderStatusStepper status={data.status} />
-
-      <Divider sx={{ my: 2 }} />
-
-      {items.length > 0 && (
-        <>
-          <Typography sx={{ fontWeight: 700, mb: 1 }}>Items</Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Item</TableCell>
-                <TableCell width={100}>Qty</TableCell>
-                {hasUnitPrice && (
-                  <TableCell width={140} align="right">
-                    Unit
-                  </TableCell>
-                )}
-                {hasUnitPrice && (
-                  <TableCell width={160} align="right">
-                    Line Total
-                  </TableCell>
-                )}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {items.map((oi: any, i: number) => {
-                const name: string =
-                  (hasName ? oi.menuItemName : null) ?? `#${oi.menuItemId}`;
-                const qty = oi.quantity ?? 1;
-                const unit =
-                  typeof oi.unitPrice !== "undefined"
-                    ? Number(oi.unitPrice)
-                    : undefined;
-                const lineTotal =
-                  typeof unit !== "undefined" ? unit * qty : undefined;
-
-                return (
-                  <TableRow key={i}>
-                    <TableCell>{name}</TableCell>
-                    <TableCell>{qty}</TableCell>
-                    {hasUnitPrice && (
-                      <TableCell align="right">
-                        {typeof unit !== "undefined"
-                          ? `CHF ${unit.toFixed(2)}`
-                          : "-"}
-                      </TableCell>
-                    )}
-                    {hasUnitPrice && (
-                      <TableCell align="right">
-                        {typeof lineTotal !== "undefined"
-                          ? `CHF ${lineTotal.toFixed(2)}`
-                          : "-"}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </>
-      )}
-
-      {hasAddress && (
-        <Box sx={{ mt: 2 }}>
-          <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Delivery</Typography>
-          <Typography variant="body2">
-            {addr.street} {addr.streetNo}
-            <br />
-            {addr.plz} {addr.city}
+      <Paper elevation={0} sx={{ p: 3, border: "1px solid rgba(11,45,36,.12)" }}>
+        <Box sx={{ display: "grid", gap: 1 }}>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Order ID:</strong> {data.id}
           </Typography>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Placed:</strong>{" "}
+            {String(data.createdAt).replace("T", " ").slice(0, 16)}
+          </Typography>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Name:</strong> {ci.firstName} {ci.lastName}
+          </Typography>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Type:</strong> {data.orderType}
+          </Typography>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Total:</strong> CHF {Number(data.totalPrice || 0).toFixed(2)}
+          </Typography>
+          <Box sx={{ mt: 1 }}>
+            <Chip label={`Status: ${data.status}`} color="primary" />
+            {" "}
+            {data.paymentMethod && (
+              <Chip
+                label={`Payment: ${data.paymentMethod}${data.paymentStatus === "SUCCEEDED" ? " · PAID" : ""}`}
+                sx={{ ml: 1 }}
+                variant="outlined"
+              />
+            )}
+          </Box>
         </Box>
-      )}
-    </Paper>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: AK_DARK, mb: 1 }}>
+          Items
+        </Typography>
+        <Box sx={{ display: "grid", gap: 0.5 }}>
+          {(data.orderItems || []).map((it) => (
+            <Typography key={String(it.menuItemId)} variant="body2" sx={{ color: AK_DARK }}>
+              {it.quantity} × {it.menuItemName || it.menuItemName} — CHF{" "}
+              {Number(it.unitPrice || 0).toFixed(2)}
+            </Typography>
+          ))}
+        </Box>
+
+        {data.specialInstructions && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: AK_DARK }}>
+              Note from you
+            </Typography>
+            <Typography variant="body2">{data.specialInstructions}</Typography>
+          </>
+        )}
+      </Paper>
+
+      <Typography variant="body2" sx={{ mt: 2, color: AK_DARK }}>
+        This page refreshes automatically every 15 seconds.
+      </Typography>
+    </Box>
   );
 }
