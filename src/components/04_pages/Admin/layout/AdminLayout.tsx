@@ -23,9 +23,10 @@ import SetMealIcon from "@mui/icons-material/SetMeal";
 import LunchDiningIcon from "@mui/icons-material/LunchDining";
 import StoreIcon from "@mui/icons-material/Store";
 import PeopleIcon from "@mui/icons-material/People";
-import LocalOfferIcon from "@mui/icons-material/LocalOffer"; // <-- NEW
+import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
+import { setupAdminWebPush } from "../../../../services/webPush";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -42,6 +43,11 @@ export default function AdminLayout() {
   const loc = useLocation();
   const { logout, username } = useAuth();
   const { alerts, total } = useAdminAlerts();
+
+  // Register service worker + subscribe to web push once per admin session
+  React.useEffect(() => {
+    setupAdminWebPush().catch(() => {});
+  }, []);
 
   const links: LinkDef[] = [
     { to: "/admin", label: "Dashboard", icon: <DashboardIcon /> },

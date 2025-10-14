@@ -1,10 +1,6 @@
-import type {
-  CustomerOrderReadDTO,
-  OrderItemReadDTO,
-} from "../types/api-types";
+import type { CustomerOrderReadDTO } from "../types/api-types";
 
 const COLS = 42; // 80mm / Font A ≈ 42 chars
-
 const line = (ch = "-") => ch.repeat(COLS);
 const padR = (s: string, n: number) =>
   s.length > n ? s.slice(0, n) : s + " ".repeat(n - s.length);
@@ -26,25 +22,23 @@ function wrap(text: string, width: number): string[] {
   return out;
 }
 
+function paymentLine(o: { paymentMethod?: string; paymentStatus?: string }) {
+  const pm = o.paymentMethod;
+  const ps = o.paymentStatus;
+
+  if (ps === "SUCCEEDED") {
+    return pm ? `${pm} · PAID` : "PAID";
+  }
+  if (ps === "NOT_REQUIRED") {
+    // offline: show method only (hide NOT_REQUIRED label)
+    return pm || "CASH";
+  }
+  // pending/failed: method only (or generic)
+  return pm || "PAYMENT";
+}
+
 export function buildCustomerOrderReceipt(o: CustomerOrderReadDTO): string {
   const rows: string[] = [];
-  const COLS = 42;
-  const line = (ch = "-") => ch.repeat(COLS);
-  const padR = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s + " ".repeat(n - s.length));
-  const money = (v: unknown) => `CHF ${Number(v || 0).toFixed(2)}`;
-
-  const wrap = (text: string, width: number): string[] => {
-    const words = String(text).split(/\s+/);
-    const out: string[] = [];
-    let cur = "";
-    for (const w of words) {
-      const next = cur ? cur + " " + w : w;
-      if (next.length <= width) cur = next;
-      else { if (cur) out.push(cur); cur = w.length > width ? w.slice(0, width) : w; }
-    }
-    if (cur) out.push(cur);
-    return out;
-  };
 
   rows.push("ASIAN KITCHEN");
   rows.push(line());
@@ -58,14 +52,19 @@ export function buildCustomerOrderReceipt(o: CustomerOrderReadDTO): string {
   if (ci?.phone) rows.push(ci.phone);
   const addr: any = ci?.address as any;
   if (addr?.street) rows.push(`${addr.street} ${addr.streetNo ?? ""}`.trim());
-  if (addr?.plz || addr?.city) rows.push(`${addr?.plz ?? ""} ${addr?.city ?? ""}`.trim());
+  if (addr?.plz || addr?.city)
+    rows.push(`${addr?.plz ?? ""} ${addr?.city ?? ""}`.trim());
   rows.push(line());
 
   rows.push(padR("Item", COLS - 12) + padR("Qty", 4) + "Amount");
   rows.push(line());
 
   for (const it of (o.orderItems || []) as any[]) {
-    const name = it.menuItemName ?? it.name ?? `#${it.menuItemId ?? ""}`.trim();
+    const name =
+      it.menuItem?.foodItem?.name ||
+      it.menuItemName ||
+      it.name ||
+      `#${it.menuItemId ?? ""}`.trim();
     const qty = it.quantity ?? 1;
     const unit = Number(it.unitPrice ?? 0);
     const total = unit * qty;
@@ -75,11 +74,11 @@ export function buildCustomerOrderReceipt(o: CustomerOrderReadDTO): string {
     for (let i = 1; i < wrapped.length; i++) rows.push(padR(wrapped[i], COLS));
   }
 
-  const pre   = Number(o.itemsSubtotalBeforeDiscount ?? 0);
-  const pct   = Number(o.discountPercent ?? 0);
-  const disc  = Number(o.discountAmount ?? 0);
-  const post  = Number(o.itemsSubtotalAfterDiscount ?? 0);
-  const vat   = Number(o.vatAmount ?? 0);
+  const pre = Number(o.itemsSubtotalBeforeDiscount ?? 0);
+  const pct = Number(o.discountPercent ?? 0);
+  const disc = Number(o.discountAmount ?? 0);
+  const post = Number(o.itemsSubtotalAfterDiscount ?? 0);
+  const vat = Number(o.vatAmount ?? 0);
   const deliv = Number(o.deliveryFee ?? 0);
   const grand = Number(o.totalPrice ?? 0);
 
@@ -94,9 +93,8 @@ export function buildCustomerOrderReceipt(o: CustomerOrderReadDTO): string {
   rows.push(line());
   rows.push(padR("TOTAL", COLS - 10) + money(grand));
 
-  if (o.paymentMethod) rows.push(`Method:  ${o.paymentMethod}`);
-  if (o.paymentStatus) rows.push(`Payment: ${o.paymentStatus}`);
-  rows.push(`Status:  ${o.status}`);
+  // Show payment line; never show NOT_REQUIRED, never show order status
+  rows.push(`Payment: ${paymentLine(o)}`);
   rows.push(line());
   rows.push("Thank you!");
   rows.push("");
@@ -153,18 +151,6 @@ function savePrintedSet(s: Set<string>) {
   localStorage.setItem(LS_KEY, JSON.stringify(Array.from(s)));
 }
 
-function isImmediatePrint(o: {
-  paymentStatus?: string;
-  paymentMethod?: string;
-}) {
-  return (
-    o.paymentStatus === "SUCCEEDED" ||
-    o.paymentMethod === "CASH" ||
-    o.paymentMethod === "TWINT" ||
-    o.paymentMethod === "POS_CARD"
-  );
-}
-
 /** Best-effort auto print: call this after you fetched/updated rows. */
 export async function autoPrintNewPaid(
   rows: CustomerOrderReadDTO[]
@@ -174,7 +160,7 @@ export async function autoPrintNewPaid(
   for (const o of rows) {
     const id = String(o.id);
     const paidOrNoStripe =
-      o.paymentStatus === "SUCCEEDED" || o.paymentStatus === "NOT_REQUIRED"; // <-- add this
+      o.paymentStatus === "SUCCEEDED" || o.paymentStatus === "NOT_REQUIRED";
     if (paidOrNoStripe && !printed.has(id)) {
       try {
         await printCustomerOrderReceipt(o);
@@ -186,4 +172,3 @@ export async function autoPrintNewPaid(
   }
   savePrintedSet(printed);
 }
-
