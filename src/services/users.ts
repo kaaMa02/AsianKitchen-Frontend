@@ -21,12 +21,9 @@ export async function createUser(dto: UserWriteDTO): Promise<UserReadDTO> {
 }
 export async function updateUser(
   id: string,
-  dto: UserProfileUpdateDTO
+  dto: AdminUserUpdateDTO
 ): Promise<UserReadDTO> {
-  const { data } = await http.put<UserReadDTO>(
-    `/api/admin/users/${id}`,
-    dto as unknown as AdminUserUpdateDTO
-  );
+  const { data } = await http.put<UserReadDTO>(`/api/admin/users/${id}`, dto);
   return data;
 }
 export async function deleteUser(id: string): Promise<void> {

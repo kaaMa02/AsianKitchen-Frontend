@@ -105,7 +105,7 @@ export default function TrackMenuOrderPage() {
         <Box sx={{ display: "grid", gap: 0.5 }}>
           {(data.orderItems || []).map((it) => (
             <Typography key={String(it.menuItemId)} variant="body2" sx={{ color: AK_DARK }}>
-              {it.quantity} × {it.menuItemName || it.menuItemName} — CHF{" "}
+              {it.quantity} × {it.menuItemName} — CHF{" "}
               {Number(it.unitPrice || 0).toFixed(2)}
             </Typography>
           ))}

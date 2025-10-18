@@ -18,10 +18,12 @@ function formatChf(n: number) {
   return `CHF ${n.toFixed(2)}`;
 }
 
+// Updated fee rules:
+// - Orders below CHF 100.00 → CHF 5.00
+// - Orders CHF 100.00 and above → CHF 0.00
 const FEE_RULES = [
-  { color: '#F0802A', label: 'Up to CHF 25.00', fee: 0 },
-  { color: '#3BB9A3', label: 'Over CHF 25.00 and under CHF 50.00', fee: 3.0 },
-  { color: '#E6A91A', label: 'Over CHF 50.00', fee: 5.0 },
+  { color: '#E6A91A', label: 'Orders below CHF 100.00', fee: 5.0 },
+  { color: '#3BB9A3', label: 'Orders CHF 100.00 and above', fee: 0.0 },
 ];
 
 function toLines(src?: string | null) {
@@ -70,7 +72,7 @@ export default function InfoCard() {
       {/* Delivery fees */}
       <Typography variant="h5" sx={{ color: '#0B2D24', fontWeight: 800, mb: 1.5 }}>
         <span role="img" aria-label="delivery">🚚</span>{' '}
-        Delivery fees (Delivery orders only)
+        Delivery fees (delivery orders only)
       </Typography>
 
       <List disablePadding>
