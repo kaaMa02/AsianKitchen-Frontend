@@ -29,6 +29,7 @@ import DiscountsPage from "./components/04_pages/Admin/DiscountsPage";
 import ThankYouPage from "./components/04_pages/ThankYouPage/ThankYouPage";
 import TrackBuffetOrderPage from "./components/04_pages/TrackOrderPage/TrackBuffetOrderPage";
 import TrackMenuOrderPage from "./components/04_pages/TrackOrderPage/TrackMenuOrderPage";
+import AdminIncomingPage from "./components/04_pages/Admin/AdminIncomingPage";
 
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
@@ -66,7 +67,8 @@ export default function App() {
               </AdminRoute>
             }
           >
-            <Route index element={<AdminDashboardPage />} />
+            <Route index element={<AdminIncomingPage />} />
+            <Route path="/admin/incoming" element={<AdminIncomingPage />} />
             <Route path="/admin/discounts" element={<DiscountsPage />} />
             <Route path="reservations" element={<ReservationsAdminPage />} />
             <Route path="orders" element={<OrdersAdminPage />} />
@@ -74,10 +76,7 @@ export default function App() {
             <Route path="food-items" element={<FoodItemsAdminPage />} />
             <Route path="menu-items" element={<MenuItemsAdminPage />} />
             <Route path="buffet-items" element={<BuffetItemsAdminPage />} />
-            <Route
-              path="restaurant-info"
-              element={<RestaurantInfoAdminPage />}
-            />
+            <Route path="restaurant-info" element={<RestaurantInfoAdminPage />} />
             <Route path="users" element={<UsersAdminPage />} />
           </Route>
           {/* Fallback */}

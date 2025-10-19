@@ -6,7 +6,11 @@ export type LocalDateTime = string;
 // --- Payments ---
 export enum PaymentStatus {
   REQUIRES_PAYMENT_METHOD = "REQUIRES_PAYMENT_METHOD",
+  REQUIRES_CONFIRMATION = "REQUIRES_CONFIRMATION",
+  REQUIRES_ACTION = "REQUIRES_ACTION",
+  PROCESSING = "PROCESSING",
   SUCCEEDED = "SUCCEEDED",
+  CANCELED = "CANCELED",
   FAILED = "FAILED",
   NOT_REQUIRED = "NOT_REQUIRED",
 }
@@ -120,6 +124,7 @@ export interface BuffetOrderItemReadDTO {
   name?: string;
   unitPrice?: BigDecimal;
   quantity: number;
+  timing?: OrderTimingReadDTO;
 }
 
 export enum OrderType {
@@ -141,7 +146,7 @@ export interface CustomerInfoDTO {
   lastName: string;
   email: string;
   phone: string;
-  address: AddressDTO;
+  address?: AddressDTO;
 }
 
 export interface BuffetOrderWriteDTO {
@@ -151,6 +156,8 @@ export interface BuffetOrderWriteDTO {
   specialInstructions?: string;
   items: BuffetOrderItemWriteDTO[];
   paymentMethod: PaymentMethod;
+  asap?: boolean;
+  scheduledAt?: string;
 }
 
 export interface BuffetOrderReadDTO {
@@ -171,6 +178,7 @@ export interface BuffetOrderReadDTO {
   itemsSubtotalAfterDiscount?: BigDecimal;
   vatAmount?: BigDecimal;
   deliveryFee?: BigDecimal;
+  timing?: OrderTimingReadDTO;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -231,6 +239,8 @@ export interface CustomerOrderWriteDTO {
   specialInstructions?: string;
   items: OrderItemWriteDTO[];
   paymentMethod: PaymentMethod;
+  asap?: boolean;
+  scheduledAt?: string;
 }
 
 export interface CustomerOrderReadDTO {
@@ -251,6 +261,7 @@ export interface CustomerOrderReadDTO {
   itemsSubtotalAfterDiscount?: BigDecimal;
   vatAmount?: BigDecimal;
   deliveryFee?: BigDecimal;
+  timing?: OrderTimingReadDTO;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -341,4 +352,34 @@ export interface ContactMessageReadDTO {
   phone?: string;
   message: string;
   createdAt: LocalDateTime;
+}
+
+export interface OrderTimingReadDTO {
+  asap: boolean;
+  requestedAt?: string | null;
+  minPrepMinutes?: number | null;
+  adminExtraMinutes?: number | null;
+  committedReadyAt?: string | null;
+  autoCancelAt?: string | null;
+  seenAt?: string | null;
+  escalatedAt?: string | null;
+}
+
+export interface NewOrderCardDTO {
+  id: UUID;
+  kind: "menu" | "buffet" | "reservation";
+  customerInfo: CustomerInfoDTO;
+  orderType?: OrderType; // orders only
+  status: OrderStatus; // reservations mapped to NEW
+  createdAt: string; // treat as UTC
+  specialInstructions?: string | null;
+  timing: OrderTimingReadDTO;
+
+  paymentStatus?: PaymentStatus; // orders only
+  paymentMethod?: PaymentMethod | null;
+  paymentIntentId?: string | null;
+  totalPrice?: number | null;
+
+  menuItems?: OrderItemReadDTO[];
+  buffetItems?: BuffetOrderItemReadDTO[];
 }

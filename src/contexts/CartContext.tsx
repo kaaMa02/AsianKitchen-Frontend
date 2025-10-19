@@ -21,9 +21,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [state, setState] = React.useState<CartState>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const ot = parsed?.orderType === OrderType.DELIVERY ? OrderType.DELIVERY : OrderType.TAKEAWAY;
+        return { ...parsed, orderType: ot };
+      }
     } catch {}
-    return { orderType: 'TAKEAWAY', lines: [] as CartLine[] };
+    return { orderType: OrderType.TAKEAWAY, lines: [] as CartLine[] };
   });
 
   React.useEffect(() => {

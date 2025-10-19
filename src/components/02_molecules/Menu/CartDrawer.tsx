@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { useCart } from "../../../contexts/CartContext";
 import { OrderType } from "../../../types/api-types";
 import { getActiveDiscount } from "../../../services/discounts";
+import CartTimingWidget from "./CartTimingWidget";
 
 type Props = { open: boolean; onClose: () => void };
 
@@ -174,6 +175,10 @@ export default function CartDrawer({ open, onClose }: Props) {
                   Minimum delivery order is CHF {MIN_DELIVERY_TOTAL.toFixed(2)}.
                 </Alert>
               )}
+
+            <Box sx={{ mt: 1.5 }}>
+              <CartTimingWidget defaultMinPrepMinutes={45} />+{" "}
+            </Box>
 
             <Box sx={{ display: "grid", gap: 1.25, mt: 1.5 }}>
               <Button onClick={clear} variant="outlined">
