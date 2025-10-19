@@ -39,7 +39,7 @@ import {
 } from "../../../services/payment";
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
-import { readCartTiming } from "../../../utils/CartTiming";
+import { readCartTiming } from "../../../utils/cartTiming";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";

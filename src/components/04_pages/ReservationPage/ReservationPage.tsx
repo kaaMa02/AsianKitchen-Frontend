@@ -1,15 +1,38 @@
+// src/components/04_pages/Reservation/ReservationPage.tsx
 import * as React from 'react';
 import {
   Box, Paper, Typography, TextField, Button, Alert, Snackbar, Divider,
 } from '@mui/material';
 import { createReservation } from '../../../services/reservations';
-import type { CustomerInfoDTO } from '../../../types/api-types';
 
 const AK_DARK = '#0B2D24';
 const AK_GOLD = '#D1A01F';
 const CARD_BG = '#F4F7FB';
 
 type Errors = Record<string, string>;
+
+/** Local strict types for the form (no optionals) */
+type ResAddress = {
+  street: string;
+  streetNo: string;
+  plz: string;
+  city: string;
+};
+type ResCustomer = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  address: ResAddress;
+};
+
+const emptyCustomer: ResCustomer = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  address: { street: '', streetNo: '', plz: '', city: '' }, // harmless if left blank
+};
 
 function nowLocalRounded(minutesStep = 5) {
   const d = new Date();
@@ -18,26 +41,17 @@ function nowLocalRounded(minutesStep = 5) {
   return new Date(Math.ceil(d.getTime() / ms) * ms);
 }
 function toLocalInputValue(d: Date) {
-  // yyyy-MM-ddTHH:mm
   const pad = (n: number) => String(n).padStart(2, '0');
   const y = d.getFullYear();
   const m = pad(d.getMonth() + 1);
   const day = pad(d.getDate());
   const hh = pad(d.getHours());
   const mm = pad(d.getMinutes());
-  return `${y}-${m}-${day}T${hh}:${mm}`;
+  return `${y}-${m}-${day}T${hh}:${mm}`; // yyyy-MM-ddTHH:mm
 }
 
-const emptyCustomer: CustomerInfoDTO = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  address: { street: '', streetNo: '', plz: '', city: '' }, // optional for dine-in; harmless if blank
-};
-
 export default function ReservationPage() {
-  const [customer, setCustomer] = React.useState<CustomerInfoDTO>(emptyCustomer);
+  const [customer, setCustomer] = React.useState<ResCustomer>(emptyCustomer);
   const [dt, setDt] = React.useState<string>(toLocalInputValue(nowLocalRounded()));
   const [people, setPeople] = React.useState<number>(2);
   const [notes, setNotes] = React.useState<string>('');
@@ -51,19 +65,18 @@ export default function ReservationPage() {
     (path: string) =>
     (ev: React.ChangeEvent<HTMLInputElement>) => {
       const v = ev.target.value;
-      setCustomer(prev => {
-        const next = { ...prev, address: { ...prev.address } };
+      setCustomer((prev): ResCustomer => {
         switch (path) {
-          case 'firstName': next.firstName = v; break;
-          case 'lastName': next.lastName = v; break;
-          case 'email': next.email = v; break;
-          case 'phone': next.phone = v; break;
-          case 'address.street': next.address.street = v; break;
-          case 'address.streetNo': next.address.streetNo = v; break;
-          case 'address.plz': next.address.plz = v; break;
-          case 'address.city': next.address.city = v; break;
+          case 'firstName':       return { ...prev, firstName: v };
+          case 'lastName':        return { ...prev, lastName: v };
+          case 'email':           return { ...prev, email: v };
+          case 'phone':           return { ...prev, phone: v };
+          case 'address.street':  return { ...prev, address: { ...prev.address, street: v } };
+          case 'address.streetNo':return { ...prev, address: { ...prev.address, streetNo: v } };
+          case 'address.plz':     return { ...prev, address: { ...prev.address, plz: v } };
+          case 'address.city':    return { ...prev, address: { ...prev.address, city: v } };
+          default:                return prev;
         }
-        return next;
       });
     };
 
@@ -74,8 +87,10 @@ export default function ReservationPage() {
     if (req(customer.lastName)) e.lastName = 'Required';
     if (req(customer.email) || !/.+@.+\..+/.test(customer.email)) e.email = 'Valid email required';
     if (req(customer.phone)) e.phone = 'Required';
+
     if (!dt || isNaN(new Date(dt).getTime())) e.datetime = 'Choose a valid date & time';
     else if (new Date(dt) < new Date()) e.datetime = 'Choose a future time';
+
     if (!Number.isFinite(people) || people < 1) e.people = 'Must be at least 1';
     return e;
   };
@@ -92,10 +107,10 @@ export default function ReservationPage() {
       }
       setSubmitting(true);
 
-      // Backend expects LocalDateTime string like "2025-09-10T19:30"
+      // Backend expects LocalDateTime like "YYYY-MM-DDTHH:mm"
       const dto = {
-        customerInfo: customer,
-        reservationDateTime: dt,
+        customerInfo: customer,            // structurally matches your backend CustomerInfoDTO
+        reservationDateTime: dt,           // local wall time without timezone
         numberOfPeople: people,
         specialRequests: notes || undefined,
       };
@@ -104,7 +119,7 @@ export default function ReservationPage() {
       setCreatedCode(created.id);
       setSuccessOpen(true);
 
-      // Optional: reset form
+      // Optional: reset
       // setCustomer(emptyCustomer);
       // setPeople(2); setNotes(''); setDt(toLocalInputValue(nowLocalRounded()));
     } catch (e: any) {
@@ -171,7 +186,7 @@ export default function ReservationPage() {
               helperText={fieldErrors.phone}
             />
 
-            {/* Optional address block (stays visually together) */}
+            {/* Optional address block */}
             <TextField
               label="Street"
               value={customer.address.street}

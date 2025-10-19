@@ -286,7 +286,7 @@ function ItemsList({
     <div style={{ marginBottom: 6 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{title}</div>
       <ul style={{ margin: 0, paddingLeft: 18 }}>
-        {items.map((it, i) => (
+        {items.map((it, i: number) => (
           <li key={i}>
             {it.name} · x {it.qty}
           </li>
