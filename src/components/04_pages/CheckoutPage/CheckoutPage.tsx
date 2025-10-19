@@ -49,8 +49,8 @@ const CARD_BG = "#F4F7FB";
 
 type Errors = Record<string, string>;
 
-// Locally “required” customer to avoid address?: issues
-type RCustomer = CustomerInfoDTO & { address: AddressDTO };
+// In this component we guarantee address exists (no optionals).
+type RCustomer = Omit<CustomerInfoDTO, "address"> & { address: AddressDTO };
 
 const emptyCustomer: RCustomer = {
   firstName: "",
@@ -210,9 +210,9 @@ export default function CheckoutPage() {
 
   const handleInput =
     (path: string) =>
-    (ev: React.ChangeEvent<HTMLInputElement>): void => {
+    (ev: React.ChangeEvent<HTMLInputElement>) => {
       const v = ev.target.value;
-      setCustomer((prev) => {
+      setCustomer((prev: RCustomer): RCustomer => {
         const next: RCustomer = { ...prev, address: { ...prev.address } };
         switch (path) {
           case "firstName":
@@ -291,7 +291,8 @@ export default function CheckoutPage() {
       setPreparing(true);
       await ensureCsrf();
 
-      const timing = readCartTiming(); // { asap?: boolean; scheduledAt?: string }
+      // Timing from cart (ASAP or scheduled)
+      const timing = readCartTiming();
 
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
@@ -304,8 +305,11 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
           paymentMethod,
-          asap: timing.asap ?? true,
-          scheduledAt: timing.asap ? undefined : timing.scheduledAt,
+          ...(timing.asap === true
+            ? { asap: true }
+            : timing.scheduledAt
+            ? { asap: false, scheduledAt: timing.scheduledAt }
+            : {}),
         };
         const order = await createCustomerOrder(payload);
         if (paymentMethod === PaymentMethod.CARD) {
@@ -317,7 +321,7 @@ export default function CheckoutPage() {
       } else {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
-          customerInfo: customer,
+          customerInfo: customer, // RCustomer is compatible with CustomerInfoDTO
           orderType,
           specialInstructions: undefined,
           items: cartLines.map((l) => ({
@@ -325,8 +329,11 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
           paymentMethod,
-          asap: timing.asap ?? true,
-          scheduledAt: timing.asap ? undefined : timing.scheduledAt,
+          ...(timing.asap === true
+            ? { asap: true }
+            : timing.scheduledAt
+            ? { asap: false, scheduledAt: timing.scheduledAt }
+            : {}),
         };
         const order = await createBuffetOrder(payload);
         if (paymentMethod === PaymentMethod.CARD) {
