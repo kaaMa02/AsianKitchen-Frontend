@@ -8,7 +8,7 @@ import {
 } from "../../../api/admin";
 import { SoundRegistry } from "../../../utils/audio";
 import { formatZurich } from "../../../utils/datetime";
-import { NewOrderCardDTO, BuffetOrderItemReadDTO } from "../../../types/api-types";
+import { NewOrderCardDTO } from "../../../types/api-types";
 
 type Kind = "menu" | "buffet" | "reservation";
 

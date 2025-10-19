@@ -8,7 +8,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { listReservations, setReservationStatus, deleteReservation } from "../../../services/reservations";
 import { notifyError, notifySuccess } from "../../../services/toast";
 import { ReservationReadDTO, ReservationStatus } from "../../../types/api-types";
-import { formatZurich } from "../../../utils/dateTime";
+import { formatZurich } from "../../../utils/datetime";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
