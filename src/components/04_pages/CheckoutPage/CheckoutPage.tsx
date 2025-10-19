@@ -49,8 +49,8 @@ const CARD_BG = "#F4F7FB";
 
 type Errors = Record<string, string>;
 
-/** Locally-required customer shape so TS knows address always exists here */
-type RCustomer = Omit<CustomerInfoDTO, "address"> & { address: AddressDTO };
+// Locally “required” customer to avoid address?: issues
+type RCustomer = CustomerInfoDTO & { address: AddressDTO };
 
 const emptyCustomer: RCustomer = {
   firstName: "",
@@ -181,9 +181,8 @@ export default function CheckoutPage() {
   const [preparing, setPreparing] = React.useState(false);
   const [customer, setCustomer] = React.useState<RCustomer>(emptyCustomer);
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
-  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
-    PaymentMethod.CARD
-  );
+  const [paymentMethod, setPaymentMethod] =
+    React.useState<PaymentMethodType>(PaymentMethod.CARD);
 
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
@@ -210,13 +209,11 @@ export default function CheckoutPage() {
   };
 
   const handleInput =
-    (path: string) => (ev: React.ChangeEvent<HTMLInputElement>) => {
+    (path: string) =>
+    (ev: React.ChangeEvent<HTMLInputElement>): void => {
       const v = ev.target.value;
       setCustomer((prev) => {
-        const next: RCustomer = {
-          ...prev,
-          address: { ...prev.address },
-        };
+        const next: RCustomer = { ...prev, address: { ...prev.address } };
         switch (path) {
           case "firstName":
             next.firstName = v;
@@ -294,10 +291,12 @@ export default function CheckoutPage() {
       setPreparing(true);
       await ensureCsrf();
 
+      const timing = readCartTiming(); // { asap?: boolean; scheduledAt?: string }
+
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
           userId: undefined,
-          customerInfo: customer,
+          customerInfo: customer, // RCustomer is compatible with CustomerInfoDTO
           orderType,
           specialInstructions: undefined,
           items: cartLines.map((l) => ({
@@ -305,7 +304,8 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
           paymentMethod,
-          ...readCartTiming(),
+          asap: timing.asap ?? true,
+          scheduledAt: timing.asap ? undefined : timing.scheduledAt,
         };
         const order = await createCustomerOrder(payload);
         if (paymentMethod === PaymentMethod.CARD) {
@@ -325,7 +325,8 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
           paymentMethod,
-          ...readCartTiming(),
+          asap: timing.asap ?? true,
+          scheduledAt: timing.asap ? undefined : timing.scheduledAt,
         };
         const order = await createBuffetOrder(payload);
         if (paymentMethod === PaymentMethod.CARD) {
@@ -516,9 +517,7 @@ export default function CheckoutPage() {
               />
             </Box>
 
-            <Typography
-              sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}
-            >
+            <Typography sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}>
               Payment method
             </Typography>
             <ToggleButtonGroup
@@ -601,7 +600,7 @@ export default function CheckoutPage() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
-      <Elements stripe={stripePromise} options={{ clientSecret: clientSecret! }}>
+      <Elements stripe={stripePromise} options={{ clientSecret }}>
         <PaymentStep totalToPay={grand} summary={OrderSummary} />
       </Elements>
     </Box>
