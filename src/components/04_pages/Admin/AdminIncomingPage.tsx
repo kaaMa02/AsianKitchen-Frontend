@@ -6,13 +6,11 @@ import {
   cancelOrder,
   patchTiming,
 } from "../../../api/admin";
-import { SoundRegistry } from "../../../utils/audio";
 import { formatZurich } from "../../../utils/datetime";
 import { NewOrderCardDTO } from "../../../types/api-types";
+import { sound } from "../../../utils/audio";
 
 type Kind = "menu" | "buffet" | "reservation";
-
-const sound = new SoundRegistry("/sounds/incoming.mp3");
 
 export default function AdminIncomingPage() {
   const [cards, setCards] = React.useState<NewOrderCardDTO[]>([]);

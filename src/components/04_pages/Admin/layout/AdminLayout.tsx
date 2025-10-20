@@ -28,6 +28,10 @@ import { useAuth } from "../../../../contexts/AuthContext";
 import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
 import { setupAdminWebPush } from "../../../../services/webPush";
 
+// Gesture-based audio unlock (see utils/audio.ts)
+import { SoundRegistry } from "../../../../utils/audio";
+const soundUnlock = new SoundRegistry("/sounds/incoming.mp3");
+
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
 
@@ -49,8 +53,21 @@ export default function AdminLayout() {
     setupAdminWebPush().catch(() => {});
   }, []);
 
+  // One-time user gesture unlock for audio autoplay
+  React.useEffect(() => {
+    const onGesture = () => {
+      soundUnlock.enable().catch(() => {});
+    };
+    window.addEventListener("click", onGesture, { once: true });
+    window.addEventListener("keydown", onGesture, { once: true });
+    return () => {
+      window.removeEventListener("click", onGesture);
+      window.removeEventListener("keydown", onGesture);
+    };
+  }, []);
+
   const links: LinkDef[] = [
-    { to: "/admin", label: "Dashboard", icon: <DashboardIcon /> },
+    { to: "/admin", label: "New Orders, Rservations", icon: <DashboardIcon /> },
     { to: "/admin/discounts", label: "Discounts", icon: <LocalOfferIcon /> },
     {
       to: "/admin/reservations",
@@ -72,63 +89,46 @@ export default function AdminLayout() {
     },
     { to: "/admin/food-items", label: "Food Items", icon: <SetMealIcon /> },
     { to: "/admin/menu-items", label: "Menu Items", icon: <LunchDiningIcon /> },
-    {
-      to: "/admin/buffet-items",
-      label: "Buffet Items",
-      icon: <LunchDiningIcon />,
-    },
-    {
-      to: "/admin/restaurant-info",
-      label: "Restaurant Info",
-      icon: <StoreIcon />,
-    },
+    { to: "/admin/buffet-items", label: "Buffet Items", icon: <LunchDiningIcon /> },
+    { to: "/admin/restaurant-info", label: "Restaurant Info", icon: <StoreIcon /> },
     { to: "/admin/users", label: "Users", icon: <PeopleIcon /> },
   ];
 
   const DrawerList = (
-    <Box
-      sx={{ width: 280, bgcolor: "#F6F0DE", height: "100%" }}
-      role="presentation"
-      onClick={() => setOpen(false)}
-    >
+    <Box sx={{ width: 280, bgcolor: "#F6F0DE", height: "100%" }} role="presentation" onClick={() => setOpen(false)}>
       <Box sx={{ p: 2, fontWeight: 800, color: AK_DARK }}>Admin</Box>
       <List>
         {links.map((l) => {
           const active = loc.pathname === l.to;
-          const content = (
-            <ListItemButton
-              key={l.to}
-              component={RouterLink}
-              to={l.to}
-              sx={{
-                borderLeft: active
-                  ? `3px solid ${AK_GOLD}`
-                  : "3px solid transparent",
-                bgcolor: active ? "rgba(209,160,31,0.08)" : "transparent",
-              }}
-            >
-              <ListItemIcon sx={{ color: AK_DARK, minWidth: 36 }}>
-                {l.badge ? (
-                  <Badge color="error" badgeContent={l.badge}>
-                    {l.icon}
-                  </Badge>
-                ) : (
-                  l.icon
-                )}
-              </ListItemIcon>
-              <ListItemText
-                primary={
-                  <Typography
-                    sx={{ color: AK_DARK, fontWeight: active ? 700 : 500 }}
-                  >
-                    {l.label}
-                  </Typography>
-                }
-              />
-            </ListItemButton>
+          return (
+            <Box key={l.to}>
+              <ListItemButton
+                component={RouterLink}
+                to={l.to}
+                sx={{
+                  borderLeft: active ? `3px solid ${AK_GOLD}` : "3px solid transparent",
+                  bgcolor: active ? "rgba(209,160,31,0.08)" : "transparent",
+                }}
+              >
+                <ListItemIcon sx={{ color: AK_DARK, minWidth: 36 }}>
+                  {l.badge ? (
+                    <Badge color="error" badgeContent={l.badge}>
+                      {l.icon}
+                    </Badge>
+                  ) : (
+                    l.icon
+                  )}
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Typography sx={{ color: AK_DARK, fontWeight: active ? 700 : 500 }}>
+                      {l.label}
+                    </Typography>
+                  }
+                />
+              </ListItemButton>
+            </Box>
           );
-
-          return <Box key={l.to}>{content}</Box>;
         })}
       </List>
     </Box>
@@ -136,24 +136,10 @@ export default function AdminLayout() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#faf9f3" }}>
-      <AppBar
-        position="fixed"
-        elevation={0}
-        sx={{ bgcolor: AK_DARK, color: "#EFE7CE" }}
-      >
+      <AppBar position="fixed" elevation={0} sx={{ bgcolor: AK_DARK, color: "#EFE7CE" }}>
         <Toolbar sx={{ color: "inherit" }}>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={() => setOpen(true)}
-            sx={{ mr: 1 }}
-          >
-            <Badge
-              color="error"
-              overlap="circular"
-              invisible={!total}
-              badgeContent={total}
-            >
+          <IconButton color="inherit" edge="start" onClick={() => setOpen(true)} sx={{ mr: 1 }}>
+            <Badge color="error" overlap="circular" invisible={!total} badgeContent={total}>
               <MenuIcon />
             </Badge>
           </IconButton>
