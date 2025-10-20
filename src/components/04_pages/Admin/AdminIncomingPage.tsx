@@ -14,91 +14,93 @@ type Kind = "menu" | "buffet" | "reservation";
 
 export default function AdminIncomingPage() {
   const [cards, setCards] = React.useState<NewOrderCardDTO[]>([]);
-  const seenOnce = React.useRef<Set<string>>(new Set()); // avoid re-posting /seen
+  const seenOnce = React.useRef<Set<string>>(new Set()); // if you later want to re-enable markSeen
   const inflight = React.useRef<boolean>(false);
 
+  // ✅ ensure audio can play on first gesture (works even if AdminLayout isn't mounted yet)
+  React.useEffect(() => {
+    const unlock = () => { sound.enable().catch(() => {}); };
+    window.addEventListener("click", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("click", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   // poll every 2500ms
-  React.useEffect(
-    () => {
-      let aborted = false;
-      const ctrl = new AbortController();
+  React.useEffect(() => {
+    let aborted = false;
+    const ctrl = new AbortController();
 
-      const tick = async () => {
-        if (inflight.current) return;
-        inflight.current = true;
-        try {
-          const data = await fetchNewCards(ctrl.signal);
-          if (aborted) return;
+    const tick = async () => {
+      if (inflight.current) return;
+      inflight.current = true;
+      try {
+        const data = await fetchNewCards(ctrl.signal);
+        if (aborted) return;
 
-          // find newly appeared IDs
-          const incomingIds = new Set(data.map((d) => d.kind + ":" + d.id));
-          const oldIds = new Set(cards.map((d) => d.kind + ":" + d.id));
+        // start/stop sounds based on appearance/disappearance
+        const incomingIds = new Set(data.map((d) => d.kind + ":" + d.id));
+        const oldIds = new Set(cards.map((d) => d.kind + ":" + d.id));
 
-          // start sound for items that are new (in data but not in old)
-          for (const d of data) {
-            const k = d.kind + ":" + d.id;
-            if (!oldIds.has(k)) sound.start(k);
-
-            // mark seen once
-            if (!seenOnce.current.has(k)) {
-              seenOnce.current.add(k);
-              markSeen(d.kind as Kind, d.id).catch(() => {});
-            }
+        // 🔊 new items → play sound
+        for (const d of data) {
+          const k = d.kind + ":" + d.id;
+          if (!oldIds.has(k)) {
+            sound.start(k);
+            // If you want to mark 'seen' when the card FIRST appears, uncomment the next lines
+            // if (!seenOnce.current.has(k)) {
+            //   seenOnce.current.add(k);
+            //   markSeen(d.kind as Kind, d.id).catch(() => {});
+            // }
           }
-          // stop sounds for items that disappeared
-          for (const o of cards) {
-            const k = o.kind + ":" + o.id;
-            if (!incomingIds.has(k)) sound.stop(k);
-          }
-
-          setCards(data);
-        } catch (e) {
-          // ignore transient errors
-        } finally {
-          inflight.current = false;
         }
-      };
 
-      const handle = window.setInterval(tick, 2500);
-      tick();
-      return () => {
-        aborted = true;
-        ctrl.abort();
-        window.clearInterval(handle);
-        sound.stopAll();
-      };
-    },
-    [
-      /* no deps; internal refs handle state */
-    ]
-  );
+        // items that disappeared → stop sound
+        for (const o of cards) {
+          const k = o.kind + ":" + o.id;
+          if (!incomingIds.has(k)) sound.stop(k);
+        }
+
+        setCards(data);
+      } catch {
+        // ignore transient errors
+      } finally {
+        inflight.current = false;
+      }
+    };
+
+    const handle = window.setInterval(tick, 2500);
+    tick();
+
+    return () => {
+      aborted = true;
+      ctrl.abort();
+      window.clearInterval(handle);
+      sound.stopAll();
+    };
+  }, [cards]);
 
   const onConfirm = async (c: NewOrderCardDTO, extraMinutes?: number) => {
-    if (c.kind === "reservation") {
-      // You can add a reservation-confirm endpoint later; for now skip
-      return;
-    }
-    await confirmOrder(c.kind, c.id, extraMinutes);
+    // ✅ allow confirming reservations too (minutes are ignored for reservations server-side)
+    await confirmOrder(c.kind as Kind, c.id, extraMinutes);
     sound.stop(c.kind + ":" + c.id);
     // optimistic remove
-    setCards((prev) =>
-      prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
-    );
+    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
   };
 
   const onCancel = async (c: NewOrderCardDTO) => {
     const reason = window.prompt("Reason (optional):") || "";
-    await cancelOrder(c.kind, c.id, reason, false);
+    await cancelOrder(c.kind as Kind, c.id, reason, false);
     sound.stop(c.kind + ":" + c.id);
-    setCards((prev) =>
-      prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
-    );
+    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
   };
 
   const onSaveMinutes = async (c: NewOrderCardDTO, mins: number) => {
     if (c.kind === "reservation") return;
-    await patchTiming(c.kind, c.id, mins);
-    // no need to refetch immediately; next poll will update committedReadyAt
+    await patchTiming(c.kind as Extract<Kind, "menu" | "buffet">, c.id, mins);
+    // next poll will update committedReadyAt
   };
 
   return (
@@ -257,14 +259,13 @@ function Card(props: {
       )}
 
       <div style={{ display: "flex", gap: 8 }}>
-        {card.kind !== "reservation" && (
-          <button
-            onClick={() => onConfirm(card, canAdjust ? mins : undefined)}
-            style={primaryBtn}
-          >
-            Confirm
-          </button>
-        )}
+        {/* ✅ show Confirm for reservations too */}
+        <button
+          onClick={() => onConfirm(card, canAdjust ? mins : undefined)}
+          style={primaryBtn}
+        >
+          Confirm
+        </button>
         <button onClick={() => onCancel(card)} style={dangerBtn}>
           Cancel
         </button>

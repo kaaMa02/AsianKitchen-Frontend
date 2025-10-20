@@ -55,7 +55,8 @@ export async function patchTiming(
 
 // confirm
 export async function confirmOrder(
-  kind: "menu" | "buffet",
+  // ✅ allow reservations too
+  kind: "menu" | "buffet" | "reservation",
   id: UUID,
   extraMinutes?: number,
   print?: boolean
@@ -69,6 +70,7 @@ export async function confirmOrder(
     if (!r.ok) throw new Error(`confirm ${r.status}`);
   });
 }
+
 
 // cancel (menu|buffet|reservation)
 export async function cancelOrder(
