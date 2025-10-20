@@ -180,6 +180,12 @@ export default function CartDrawer({ open, onClose }: Props) {
               <CartTimingWidget defaultMinPrepMinutes={45} />+{" "}
             </Box>
 
+            <Box>
+              <Typography sx={{ color: "#0B2D24", fontWeight: 400 }}>
+                Currently under Maintenance, Please call +41 79 420 74 16 to order directly. Thank you for your patience.
+              </Typography>
+            </Box>
+
             <Box sx={{ display: "grid", gap: 1.25, mt: 1.5 }}>
               <Button onClick={clear} variant="outlined">
                 Clear cart
@@ -187,11 +193,12 @@ export default function CartDrawer({ open, onClose }: Props) {
               <Button
                 variant="contained"
                 onClick={goCheckout}
-                disabled={!canCheckout}
+                disabled={true}
                 sx={{ "&:hover": { bgcolor: "#0a241c" } }}
               >
                 Go to checkout
               </Button>
+
             </Box>
           </>
         )}
