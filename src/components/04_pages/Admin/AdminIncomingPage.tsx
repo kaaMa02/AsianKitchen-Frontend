@@ -16,11 +16,15 @@ type Kind = "menu" | "buffet" | "reservation";
 
 export default function AdminIncomingPage() {
   const [cards, setCards] = React.useState<NewOrderCardDTO[]>([]);
+  const [loadedOnce, setLoadedOnce] = React.useState(false);
+  const [lastError, setLastError] = React.useState<string | null>(null);
+  const [lastStatus, setLastStatus] = React.useState<string>("—");
+  const [lastFetchAt, setLastFetchAt] = React.useState<number | null>(null);
+
   const prevIds = React.useRef<Set<string>>(new Set());
   const seenOnce = React.useRef<Set<string>>(new Set());
   const inflight = React.useRef<boolean>(false);
 
-  // Ensure audio can play on first gesture (in case AdminLayout isn't mounted yet)
   React.useEffect(() => {
     const unlock = () => {
       sound.enable().catch(() => {});
@@ -33,12 +37,10 @@ export default function AdminIncomingPage() {
     };
   }, []);
 
-  // Clear red-dot counters for Incoming view (we only want red dots here)
   React.useEffect(() => {
     markAlertsSeen(["orders", "buffet", "reservations"]).catch(() => {});
   }, []);
 
-  // Poll backend for new cards (stable interval, no dependency on `cards`)
   React.useEffect(() => {
     let aborted = false;
     const ctrl = new AbortController();
@@ -47,13 +49,19 @@ export default function AdminIncomingPage() {
       if (inflight.current) return;
       inflight.current = true;
       try {
+        setLastError(null);
+
+        // fetchNewCards should throw on !ok; if it returns {data, status} expose it; else we fake a status string
         const data = await fetchNewCards(ctrl.signal);
         if (aborted) return;
+
+        setLastStatus("200");
+        setLastFetchAt(Date.now());
+        setLoadedOnce(true);
 
         const newIds = new Set(data.map((d) => `${d.kind}:${d.id}`));
         const oldIds = prevIds.current;
 
-        // Start sound + mark seen for new arrivals
         for (const d of data) {
           const k = `${d.kind}:${d.id}`;
           if (!oldIds.has(k)) {
@@ -65,15 +73,21 @@ export default function AdminIncomingPage() {
           }
         }
 
-        // Option A: Set.prototype.forEach
         oldIds.forEach((k) => {
           if (!newIds.has(k)) sound.stop(k);
         });
 
         setCards(data);
         prevIds.current = newIds;
-      } catch {
-        // ignore transient errors
+      } catch (err: any) {
+        const msg = err?.response?.status
+          ? `${err.response.status} ${err.response.statusText || ""}`.trim()
+          : err?.message || "Unknown error";
+        setLastStatus(
+          err?.response?.status ? String(err.response.status) : "ERR"
+        );
+        setLastError(msg);
+        console.error("[incoming] poll failed:", err);
       } finally {
         inflight.current = false;
       }
@@ -96,7 +110,6 @@ export default function AdminIncomingPage() {
     const key = `${c.kind}:${c.id}`;
     sound.stop(key);
     prevIds.current.delete(key);
-    // optimistic remove
     setCards((prev) =>
       prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
     );
@@ -120,15 +133,38 @@ export default function AdminIncomingPage() {
       c.id,
       Math.max(0, mins)
     );
-    // next poll will update committedReadyAt
   };
 
   return (
     <div className="container" style={{ padding: "16px 20px" }}>
-      <h1 style={{ marginBottom: 16 }}>Incoming (NEW)</h1>
+      <h1 style={{ marginBottom: 8 }}>Incoming (NEW)</h1>
 
-      {!cards.length && (
+      {/* Tiny debug bar — remove when stable */}
+      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
+        Status: <b>{lastStatus}</b>
+        {" · "}Last fetch:{" "}
+        {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
+        {lastError ? (
+          <>
+            {" · "}
+            <span style={{ color: "#b91c1c" }}>Error: {lastError}</span>
+          </>
+        ) : null}
+      </div>
+
+      {loadedOnce && !cards.length && !lastError && (
         <div style={{ opacity: 0.7 }}>No new orders or reservations.</div>
+      )}
+
+      {!loadedOnce && !lastError && (
+        <div style={{ opacity: 0.7 }}>Connecting…</div>
+      )}
+
+      {lastError && (
+        <div style={{ color: "#b91c1c", marginBottom: 8 }}>
+          Couldn’t load incoming cards. Check admin auth/CSRF/CORS and the
+          /admin incoming endpoint.
+        </div>
       )}
 
       <div
