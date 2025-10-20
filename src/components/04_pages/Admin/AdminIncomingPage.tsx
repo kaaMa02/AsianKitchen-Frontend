@@ -1,3 +1,4 @@
+// src/components/04_pages/Admin/AdminIncomingPage.tsx
 import React from "react";
 import {
   fetchNewCards,
@@ -9,17 +10,21 @@ import {
 import { formatZurich } from "../../../utils/datetime";
 import { NewOrderCardDTO } from "../../../types/api-types";
 import { sound } from "../../../utils/audio";
+import { markAlertsSeen } from "../../../services/alerts";
 
 type Kind = "menu" | "buffet" | "reservation";
 
 export default function AdminIncomingPage() {
   const [cards, setCards] = React.useState<NewOrderCardDTO[]>([]);
-  const seenOnce = React.useRef<Set<string>>(new Set()); // if you later want to re-enable markSeen
+  const prevIds = React.useRef<Set<string>>(new Set());
+  const seenOnce = React.useRef<Set<string>>(new Set());
   const inflight = React.useRef<boolean>(false);
 
-  // ✅ ensure audio can play on first gesture (works even if AdminLayout isn't mounted yet)
+  // Ensure audio can play on first gesture (in case AdminLayout isn't mounted yet)
   React.useEffect(() => {
-    const unlock = () => { sound.enable().catch(() => {}); };
+    const unlock = () => {
+      sound.enable().catch(() => {});
+    };
     window.addEventListener("click", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
     return () => {
@@ -28,7 +33,12 @@ export default function AdminIncomingPage() {
     };
   }, []);
 
-  // poll every 2500ms
+  // Clear red-dot counters for Incoming view (we only want red dots here)
+  React.useEffect(() => {
+    markAlertsSeen(["orders", "buffet", "reservations"]).catch(() => {});
+  }, []);
+
+  // Poll backend for new cards (stable interval, no dependency on `cards`)
   React.useEffect(() => {
     let aborted = false;
     const ctrl = new AbortController();
@@ -40,30 +50,28 @@ export default function AdminIncomingPage() {
         const data = await fetchNewCards(ctrl.signal);
         if (aborted) return;
 
-        // start/stop sounds based on appearance/disappearance
-        const incomingIds = new Set(data.map((d) => d.kind + ":" + d.id));
-        const oldIds = new Set(cards.map((d) => d.kind + ":" + d.id));
+        const newIds = new Set(data.map((d) => `${d.kind}:${d.id}`));
+        const oldIds = prevIds.current;
 
-        // 🔊 new items → play sound
+        // Start sound + mark seen for new arrivals
         for (const d of data) {
-          const k = d.kind + ":" + d.id;
+          const k = `${d.kind}:${d.id}`;
           if (!oldIds.has(k)) {
             sound.start(k);
-            // If you want to mark 'seen' when the card FIRST appears, uncomment the next lines
-            // if (!seenOnce.current.has(k)) {
-            //   seenOnce.current.add(k);
-            //   markSeen(d.kind as Kind, d.id).catch(() => {});
-            // }
+            if (!seenOnce.current.has(k)) {
+              seenOnce.current.add(k);
+              markSeen(d.kind as Kind, d.id).catch(() => {});
+            }
           }
         }
 
-        // items that disappeared → stop sound
-        for (const o of cards) {
-          const k = o.kind + ":" + o.id;
-          if (!incomingIds.has(k)) sound.stop(k);
-        }
+        // Option A: Set.prototype.forEach
+        oldIds.forEach((k) => {
+          if (!newIds.has(k)) sound.stop(k);
+        });
 
         setCards(data);
+        prevIds.current = newIds;
       } catch {
         // ignore transient errors
       } finally {
@@ -72,34 +80,46 @@ export default function AdminIncomingPage() {
     };
 
     const handle = window.setInterval(tick, 2500);
-    tick();
+    void tick();
 
     return () => {
       aborted = true;
       ctrl.abort();
       window.clearInterval(handle);
       sound.stopAll();
+      prevIds.current.clear();
     };
-  }, [cards]);
+  }, []);
 
   const onConfirm = async (c: NewOrderCardDTO, extraMinutes?: number) => {
-    // ✅ allow confirming reservations too (minutes are ignored for reservations server-side)
     await confirmOrder(c.kind as Kind, c.id, extraMinutes);
-    sound.stop(c.kind + ":" + c.id);
+    const key = `${c.kind}:${c.id}`;
+    sound.stop(key);
+    prevIds.current.delete(key);
     // optimistic remove
-    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
+    setCards((prev) =>
+      prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
+    );
   };
 
   const onCancel = async (c: NewOrderCardDTO) => {
     const reason = window.prompt("Reason (optional):") || "";
     await cancelOrder(c.kind as Kind, c.id, reason, false);
-    sound.stop(c.kind + ":" + c.id);
-    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
+    const key = `${c.kind}:${c.id}`;
+    sound.stop(key);
+    prevIds.current.delete(key);
+    setCards((prev) =>
+      prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
+    );
   };
 
   const onSaveMinutes = async (c: NewOrderCardDTO, mins: number) => {
     if (c.kind === "reservation") return;
-    await patchTiming(c.kind as Extract<Kind, "menu" | "buffet">, c.id, mins);
+    await patchTiming(
+      c.kind as Extract<Kind, "menu" | "buffet">,
+      c.id,
+      Math.max(0, mins)
+    );
     // next poll will update committedReadyAt
   };
 
@@ -120,7 +140,7 @@ export default function AdminIncomingPage() {
       >
         {cards.map((c) => (
           <Card
-            key={c.kind + ":" + c.id}
+            key={`${c.kind}:${c.id}`}
             card={c}
             onConfirm={onConfirm}
             onCancel={onCancel}
@@ -198,6 +218,20 @@ function Card(props: {
         </div>
       )}
 
+      {/* Menu items */}
+      {card.kind !== "reservation" &&
+        card.menuItems &&
+        card.menuItems.length > 0 && (
+          <ItemsList
+            title="Menu items"
+            items={card.menuItems.map((i) => ({
+              name: i.menuItemName || "—",
+              qty: i.quantity,
+            }))}
+          />
+        )}
+
+      {/* Buffet items */}
       {card.kind !== "reservation" &&
         card.buffetItems &&
         card.buffetItems.length > 0 && (
@@ -259,7 +293,7 @@ function Card(props: {
       )}
 
       <div style={{ display: "flex", gap: 8 }}>
-        {/* ✅ show Confirm for reservations too */}
+        {/* Confirm also for reservations */}
         <button
           onClick={() => onConfirm(card, canAdjust ? mins : undefined)}
           style={primaryBtn}

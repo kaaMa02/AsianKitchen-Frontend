@@ -1,3 +1,4 @@
+// src/components/04_pages/Admin/layout/AdminLayout.tsx
 import * as React from "react";
 import { Outlet, Link as RouterLink, useLocation } from "react-router-dom";
 import {
@@ -46,7 +47,7 @@ export default function AdminLayout() {
   const [open, setOpen] = React.useState(false);
   const loc = useLocation();
   const { logout, username } = useAuth();
-  const { alerts, total } = useAdminAlerts();
+  const { total } = useAdminAlerts(); // we’ll show a single badge only for Incoming
 
   // Register service worker + subscribe to web push once per admin session
   React.useEffect(() => {
@@ -67,26 +68,13 @@ export default function AdminLayout() {
   }, []);
 
   const links: LinkDef[] = [
-    { to: "/admin", label: "New Orders, Rservations", icon: <DashboardIcon /> },
+    // ✅ Only this entry shows the combined "incoming" badge
+    { to: "/admin", label: "New Orders, Reservations", icon: <DashboardIcon />, badge: total },
+
     { to: "/admin/discounts", label: "Discounts", icon: <LocalOfferIcon /> },
-    {
-      to: "/admin/reservations",
-      label: "Reservations",
-      icon: <EventSeatIcon />,
-      badge: alerts.reservationsRequested,
-    },
-    {
-      to: "/admin/orders",
-      label: "Menu Orders",
-      icon: <ReceiptLongIcon />,
-      badge: alerts.ordersNew,
-    },
-    {
-      to: "/admin/buffet-orders",
-      label: "Buffet Orders",
-      icon: <RamenDiningIcon />,
-      badge: alerts.buffetOrdersNew,
-    },
+    { to: "/admin/reservations", label: "Reservations", icon: <EventSeatIcon /> },
+    { to: "/admin/orders", label: "Menu Orders", icon: <ReceiptLongIcon /> },
+    { to: "/admin/buffet-orders", label: "Buffet Orders", icon: <RamenDiningIcon /> },
     { to: "/admin/food-items", label: "Food Items", icon: <SetMealIcon /> },
     { to: "/admin/menu-items", label: "Menu Items", icon: <LunchDiningIcon /> },
     { to: "/admin/buffet-items", label: "Buffet Items", icon: <LunchDiningIcon /> },
@@ -111,7 +99,7 @@ export default function AdminLayout() {
                 }}
               >
                 <ListItemIcon sx={{ color: AK_DARK, minWidth: 36 }}>
-                  {l.badge ? (
+                  {typeof l.badge === "number" && l.badge > 0 ? (
                     <Badge color="error" badgeContent={l.badge}>
                       {l.icon}
                     </Badge>
@@ -139,6 +127,7 @@ export default function AdminLayout() {
       <AppBar position="fixed" elevation={0} sx={{ bgcolor: AK_DARK, color: "#EFE7CE" }}>
         <Toolbar sx={{ color: "inherit" }}>
           <IconButton color="inherit" edge="start" onClick={() => setOpen(true)} sx={{ mr: 1 }}>
+            {/* Badge on the hamburger matches Incoming total */}
             <Badge color="error" overlap="circular" invisible={!total} badgeContent={total}>
               <MenuIcon />
             </Badge>
@@ -146,9 +135,7 @@ export default function AdminLayout() {
           <Typography sx={{ flex: 1, fontWeight: 800, color: "inherit" }}>
             Asian Kitchen · Admin
           </Typography>
-          <Typography sx={{ mr: 2, opacity: 0.9, color: "inherit" }}>
-            {username}
-          </Typography>
+          <Typography sx={{ mr: 2, opacity: 0.9, color: "inherit" }}>{username}</Typography>
           <Button
             onClick={logout}
             size="small"
