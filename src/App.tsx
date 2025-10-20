@@ -68,7 +68,7 @@ export default function App() {
             }
           >
             <Route index element={<AdminIncomingPage />} />
-            <Route path="/admin/incoming" element={<AdminIncomingPage />} />
+            <Route path="/admin" element={<AdminIncomingPage />} />
             <Route path="/admin/discounts" element={<DiscountsPage />} />
             <Route path="reservations" element={<ReservationsAdminPage />} />
             <Route path="orders" element={<OrdersAdminPage />} />
