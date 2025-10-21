@@ -1,7 +1,13 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Paper, Typography, Box, Chip, Divider, Alert, CircularProgress,
+  Paper,
+  Typography,
+  Box,
+  Chip,
+  Divider,
+  Alert,
+  CircularProgress,
 } from "@mui/material";
 import type { CustomerOrderReadDTO } from "../../../types/api-types";
 import { trackCustomerOrder } from "../../../services/customerOrders";
@@ -59,6 +65,15 @@ export default function TrackMenuOrderPage() {
   if (!data) return null;
 
   const ci = data.customerInfo || ({} as any);
+  const fmt = (v?: any) => (v ? String(v).replace("T", " ").slice(0, 16) : "—");
+  const requestedAt: any =
+    (data as any).requestedAt ||
+    (data as any).timing?.requestedAt ||
+    (data as any).committedReadyAt;
+  const asap: boolean =
+    Boolean((data as any).asap) ||
+    Boolean((data as any).timing?.asap) ||
+    !requestedAt;
 
   return (
     <Box sx={{ p: 3, maxWidth: 800, mx: "auto" }}>
@@ -66,14 +81,19 @@ export default function TrackMenuOrderPage() {
         Track your order
       </Typography>
 
-      <Paper elevation={0} sx={{ p: 3, border: "1px solid rgba(11,45,36,.12)" }}>
+      <Paper
+        elevation={0}
+        sx={{ p: 3, border: "1px solid rgba(11,45,36,.12)" }}
+      >
         <Box sx={{ display: "grid", gap: 1 }}>
           <Typography variant="body2" sx={{ color: AK_DARK }}>
             <strong>Order ID:</strong> {data.id}
           </Typography>
           <Typography variant="body2" sx={{ color: AK_DARK }}>
-            <strong>Placed:</strong>{" "}
-            {String(data.createdAt).replace("T", " ").slice(0, 16)}
+            <strong>Placed:</strong> {fmt(data.createdAt)}
+          </Typography>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Deliver:</strong> {asap ? "ASAP" : fmt(requestedAt)}
           </Typography>
           <Typography variant="body2" sx={{ color: AK_DARK }}>
             <strong>Name:</strong> {ci.firstName} {ci.lastName}
@@ -82,14 +102,16 @@ export default function TrackMenuOrderPage() {
             <strong>Type:</strong> {data.orderType}
           </Typography>
           <Typography variant="body2" sx={{ color: AK_DARK }}>
-            <strong>Total:</strong> CHF {Number(data.totalPrice || 0).toFixed(2)}
+            <strong>Total:</strong> CHF{" "}
+            {Number(data.totalPrice || 0).toFixed(2)}
           </Typography>
           <Box sx={{ mt: 1 }}>
-            <Chip label={`Status: ${data.status}`} color="primary" />
-            {" "}
+            <Chip label={`Status: ${data.status}`} color="primary" />{" "}
             {data.paymentMethod && (
               <Chip
-                label={`Payment: ${data.paymentMethod}${data.paymentStatus === "SUCCEEDED" ? " · PAID" : ""}`}
+                label={`Payment: ${data.paymentMethod}${
+                  data.paymentStatus === "SUCCEEDED" ? " · PAID" : ""
+                }`}
                 sx={{ ml: 1 }}
                 variant="outlined"
               />
@@ -99,12 +121,19 @@ export default function TrackMenuOrderPage() {
 
         <Divider sx={{ my: 2 }} />
 
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: AK_DARK, mb: 1 }}>
+        <Typography
+          variant="subtitle1"
+          sx={{ fontWeight: 700, color: AK_DARK, mb: 1 }}
+        >
           Items
         </Typography>
         <Box sx={{ display: "grid", gap: 0.5 }}>
           {(data.orderItems || []).map((it) => (
-            <Typography key={String(it.menuItemId)} variant="body2" sx={{ color: AK_DARK }}>
+            <Typography
+              key={String(it.menuItemId)}
+              variant="body2"
+              sx={{ color: AK_DARK }}
+            >
               {it.quantity} × {it.menuItemName} — CHF{" "}
               {Number(it.unitPrice || 0).toFixed(2)}
             </Typography>
@@ -114,7 +143,10 @@ export default function TrackMenuOrderPage() {
         {data.specialInstructions && (
           <>
             <Divider sx={{ my: 2 }} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: AK_DARK }}>
+            <Typography
+              variant="subtitle1"
+              sx={{ fontWeight: 700, color: AK_DARK }}
+            >
               Note from you
             </Typography>
             <Typography variant="body2">{data.specialInstructions}</Typography>

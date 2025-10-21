@@ -1,4 +1,3 @@
-// src/components/04_pages/Admin/layout/AdminLayout.tsx
 import * as React from "react";
 import { Outlet, Link as RouterLink, useLocation } from "react-router-dom";
 import {
@@ -64,9 +63,7 @@ export default function AdminLayout() {
   }, []);
 
   const links: LinkDef[] = [
-    // Only this entry shows the combined "incoming" badge
     { to: "/admin", label: "New Orders, Reservations", icon: <DashboardIcon />, badge: total },
-
     { to: "/admin/discounts", label: "Discounts", icon: <LocalOfferIcon /> },
     { to: "/admin/reservations", label: "Reservations", icon: <EventSeatIcon /> },
     { to: "/admin/orders", label: "Menu Orders", icon: <ReceiptLongIcon /> },
@@ -123,7 +120,6 @@ export default function AdminLayout() {
       <AppBar position="fixed" elevation={0} sx={{ bgcolor: AK_DARK, color: "#EFE7CE" }}>
         <Toolbar sx={{ color: "inherit" }}>
           <IconButton color="inherit" edge="start" onClick={() => setOpen(true)} sx={{ mr: 1 }}>
-            {/* Badge on the hamburger matches Incoming total */}
             <Badge color="error" overlap="circular" invisible={!total} badgeContent={total}>
               <MenuIcon />
             </Badge>

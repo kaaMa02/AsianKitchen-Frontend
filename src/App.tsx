@@ -20,7 +20,6 @@ import RestaurantInfoAdminPage from "./components/04_pages/Admin/RestaurantInfoA
 import UsersAdminPage from "./components/04_pages/Admin/UsersAdminPage";
 import LoginPage from "./components/04_pages/Auth/LoginPage";
 import AdminRoute from "./routes/AdminRoute";
-import AdminDashboardPage from "./components/04_pages/Admin/AdminDashboardPage";
 import OrdersAdminPage from "./components/04_pages/Admin/CustomerOrdersAdminPage";
 
 import { bootstrapCsrf } from "./services/http";
@@ -35,7 +34,7 @@ const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
 
 export default function App() {
-  const loc = useLocation(); 
+  const loc = useLocation();
   useEffect(() => {
     bootstrapCsrf().catch(() => {});
   }, []);
@@ -44,8 +43,8 @@ export default function App() {
 
   return (
     <ErrorBoundary fallback={<PageLoader />}>
-      <Navbar />
-      <Box sx={{ height: { xs: 56, md: 64 } }} />
+      {!isAdmin && <Navbar />}
+      {!isAdmin && <Box sx={{ height: { xs: 56, md: 64 } }} />}
 
       <Suspense fallback={<PageLoader />}>
         <Routes>
@@ -79,9 +78,13 @@ export default function App() {
             <Route path="food-items" element={<FoodItemsAdminPage />} />
             <Route path="menu-items" element={<MenuItemsAdminPage />} />
             <Route path="buffet-items" element={<BuffetItemsAdminPage />} />
-            <Route path="restaurant-info" element={<RestaurantInfoAdminPage />} />
+            <Route
+              path="restaurant-info"
+              element={<RestaurantInfoAdminPage />}
+            />
             <Route path="users" element={<UsersAdminPage />} />
           </Route>
+
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

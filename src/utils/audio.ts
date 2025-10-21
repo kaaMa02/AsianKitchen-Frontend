@@ -1,5 +1,5 @@
 // Single-channel looped bell with per-card TTL.
-// API stays the same: sound.enable(), sound.start(id), sound.stop(id), sound.stopAll()
+// API: sound.enable(), sound.start(id), sound.stop(id), sound.stopAll()
 
 export class SingleBell {
   private audio: HTMLAudioElement;

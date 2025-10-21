@@ -59,6 +59,15 @@ export default function TrackBuffetOrderPage() {
   if (!data) return null;
 
   const ci = data.customerInfo || ({} as any);
+  const fmt = (v?: any) => (v ? String(v).replace("T", " ").slice(0, 16) : "—");
+  const requestedAt: any =
+    (data as any).requestedAt ||
+    (data as any).timing?.requestedAt ||
+    (data as any).committedReadyAt;
+  const asap: boolean =
+    Boolean((data as any).asap) ||
+    Boolean((data as any).timing?.asap) ||
+    !requestedAt;
 
   return (
     <Box sx={{ p: 3, maxWidth: 800, mx: "auto" }}>
@@ -72,8 +81,10 @@ export default function TrackBuffetOrderPage() {
             <strong>Order ID:</strong> {data.id}
           </Typography>
           <Typography variant="body2" sx={{ color: AK_DARK }}>
-            <strong>Placed:</strong>{" "}
-            {String(data.createdAt).replace("T", " ").slice(0, 16)}
+            <strong>Placed:</strong> {fmt(data.createdAt)}
+          </Typography>
+          <Typography variant="body2" sx={{ color: AK_DARK }}>
+            <strong>Deliver:</strong> {asap ? "ASAP" : fmt(requestedAt)}
           </Typography>
           <Typography variant="body2" sx={{ color: AK_DARK }}>
             <strong>Name:</strong> {ci.firstName} {ci.lastName}
@@ -85,8 +96,7 @@ export default function TrackBuffetOrderPage() {
             <strong>Total:</strong> CHF {Number(data.totalPrice || 0).toFixed(2)}
           </Typography>
           <Box sx={{ mt: 1 }}>
-            <Chip label={`Status: ${data.status}`} color="primary" />
-            {" "}
+            <Chip label={`Status: ${data.status}`} color="primary" />{" "}
             {data.paymentMethod && (
               <Chip
                 label={`Payment: ${data.paymentMethod}${data.paymentStatus === "SUCCEEDED" ? " · PAID" : ""}`}

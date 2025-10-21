@@ -1,4 +1,3 @@
-// frontend/src/components/04_pages/Admin/BuffetOrdersAdminPage.tsx
 import * as React from "react";
 import {
   Paper,
@@ -167,9 +166,9 @@ function OrdersTable({
   return (
     <TableContainer
       sx={{
-        maxHeight: "calc(100vh - 280px)", // flexible viewport height
         border: "1px solid #E2D9C2",
         bgcolor: "#fff",
+        overflow: "visible", // allow popovers to overflow
       }}
     >
       <Table size="small" stickyHeader>

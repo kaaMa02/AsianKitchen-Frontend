@@ -1,4 +1,3 @@
-// frontend/src/components/04_pages/Admin/AdminIncomingPage.tsx
 import React from "react";
 import {
   fetchNewCards,
@@ -19,6 +18,7 @@ type Kind = "menu" | "buffet" | "reservation";
 const BORDER = "#E6E3D6";
 const MUTED = "#6b7280";
 const AK_DARK = "#0B2D24";
+const SHOW_DEBUG = false; // hide status/last fetch by default
 
 export default function AdminIncomingPage() {
   const [cards, setCards] = React.useState<NewOrderCardDTO[]>([]);
@@ -167,30 +167,35 @@ export default function AdminIncomingPage() {
     <div className="container" style={{ padding: "16px 20px" }}>
       <h1 style={{ marginBottom: 8 }}>Incoming (NEW)</h1>
 
-      {/* tiny debug strip */}
-      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
-        Status: <b>{lastStatus}</b>
-        {" · "}Last fetch:{" "}
-        {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
-        {lastError ? (
-          <>
-            {" · "}
-            <span style={{ color: "#b91c1c" }}>Error: {lastError}</span>
-          </>
-        ) : null}
-      </div>
+      {SHOW_DEBUG && (
+        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
+          Status: <b>{lastStatus}</b>
+          {" · "}
+          Last fetch:{" "}
+          {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
+          {lastError && (
+            <>
+              {" · "}
+              <span style={{ color: "#b91c1c" }}>Error: {lastError}</span>
+            </>
+          )}
+        </div>
+      )}
 
-      {/* Filter bar */}
+      {/* Filter bar (right, compact, neutral) */}
       <div
         style={{
           display: "flex",
-          gap: 8,
+          gap: 6,
           alignItems: "center",
-          marginBottom: 12,
+          marginBottom: 10,
           flexWrap: "wrap",
+          justifyContent: "flex-end",
         }}
       >
-        <span style={{ fontWeight: 700, marginRight: 4 }}>Show:</span>
+        <span style={{ fontWeight: 600, color: "#374151", marginRight: 4 }}>
+          Show:
+        </span>
         <Toggle
           label="Menu orders"
           active={showMenu}
@@ -254,13 +259,14 @@ function Toggle({
     <button
       onClick={onClick}
       style={{
-        padding: "6px 10px",
+        padding: "4px 8px",
         borderRadius: 999,
-        border: `1px solid ${active ? AK_DARK : BORDER}`,
-        background: active ? AK_DARK : "#fff",
-        color: active ? "#EFE7CE" : AK_DARK,
+        border: `1px solid ${active ? "#9ca3af" : "#d1d5db"}`,
+        background: active ? "#f3f4f6" : "#fff",
+        color: "#374151",
         cursor: "pointer",
-        fontWeight: 800,
+        fontWeight: 600,
+        fontSize: 13,
       }}
     >
       {label}
@@ -437,7 +443,7 @@ function Card(props: {
           }}
         >
           <div style={{ fontWeight: 700, marginRight: 8 }}>Add minutes</div>
-          {EXTRA_CHOICES.map((n) => {
+          {[10, 15, 20, 30].map((n) => {
             const active = extra === n;
             return (
               <button
