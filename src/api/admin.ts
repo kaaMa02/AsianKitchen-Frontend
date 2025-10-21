@@ -1,4 +1,4 @@
-// src/api/admin.ts
+// frontend/src/api/admin.ts
 import http from "../services/http";
 import { NewOrderCardDTO, UUID } from "../types/api-types";
 
@@ -9,7 +9,7 @@ export async function fetchNewCards(signal?: AbortSignal): Promise<NewOrderCardD
   const res = await http.get<NewOrderCardDTO[]>(`${BASE}/orders/new`, {
     signal,
     headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
-    validateStatus: (s) => s < 500, // let 4xx bubble with message
+    validateStatus: (s) => s < 500,
   });
   if (res.status === 401 || res.status === 403) {
     throw new Error(`${res.status} Unauthorized — admin cookie/CSRF/CORS`);
@@ -28,19 +28,6 @@ export async function markSeen(
   await http.post(`${BASE}/${kind}-orders/${id}/seen`, {}, {
     headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
   });
-}
-
-/** Patch extra minutes (ASAP only) */
-export async function patchTiming(
-  kind: "menu" | "buffet",
-  id: UUID,
-  adminExtraMinutes: number
-): Promise<void> {
-  await http.patch(
-    `${BASE}/${kind}-orders/${id}/timing`,
-    { adminExtraMinutes },
-    { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } }
-  );
 }
 
 /** Confirm (menu | buffet | reservation) */

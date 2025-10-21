@@ -1,11 +1,10 @@
-// src/components/04_pages/Admin/AdminIncomingPage.tsx
+// frontend/src/components/04_pages/Admin/AdminIncomingPage.tsx
 import React from "react";
 import {
   fetchNewCards,
   markSeen,
   confirmOrder,
   cancelOrder,
-  patchTiming,
 } from "../../../api/admin";
 import { formatZurich } from "../../../utils/datetime";
 import { NewOrderCardDTO } from "../../../types/api-types";
@@ -13,6 +12,10 @@ import { sound } from "../../../utils/audio";
 import { markAlertsSeen } from "../../../services/alerts";
 
 type Kind = "menu" | "buffet" | "reservation";
+
+const BORDER = "#E6E3D6";
+const MUTED = "#6b7280";
+const AK_DARK = "#0B2D24";
 
 export default function AdminIncomingPage() {
   const [cards, setCards] = React.useState<NewOrderCardDTO[]>([]);
@@ -50,8 +53,6 @@ export default function AdminIncomingPage() {
       inflight.current = true;
       try {
         setLastError(null);
-
-        // fetchNewCards should throw on !ok; if it returns {data, status} expose it; else we fake a status string
         const data = await fetchNewCards(ctrl.signal);
         if (aborted) return;
 
@@ -83,9 +84,7 @@ export default function AdminIncomingPage() {
         const msg = err?.response?.status
           ? `${err.response.status} ${err.response.statusText || ""}`.trim()
           : err?.message || "Unknown error";
-        setLastStatus(
-          err?.response?.status ? String(err.response.status) : "ERR"
-        );
+        setLastStatus(err?.response?.status ? String(err.response.status) : "ERR");
         setLastError(msg);
         console.error("[incoming] poll failed:", err);
       } finally {
@@ -110,9 +109,7 @@ export default function AdminIncomingPage() {
     const key = `${c.kind}:${c.id}`;
     sound.stop(key);
     prevIds.current.delete(key);
-    setCards((prev) =>
-      prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
-    );
+    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
   };
 
   const onCancel = async (c: NewOrderCardDTO) => {
@@ -121,29 +118,16 @@ export default function AdminIncomingPage() {
     const key = `${c.kind}:${c.id}`;
     sound.stop(key);
     prevIds.current.delete(key);
-    setCards((prev) =>
-      prev.filter((x) => !(x.kind === c.kind && x.id === c.id))
-    );
-  };
-
-  const onSaveMinutes = async (c: NewOrderCardDTO, mins: number) => {
-    if (c.kind === "reservation") return;
-    await patchTiming(
-      c.kind as Extract<Kind, "menu" | "buffet">,
-      c.id,
-      Math.max(0, mins)
-    );
+    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
   };
 
   return (
     <div className="container" style={{ padding: "16px 20px" }}>
       <h1 style={{ marginBottom: 8 }}>Incoming (NEW)</h1>
 
-      {/* Tiny debug bar — remove when stable */}
       <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
         Status: <b>{lastStatus}</b>
-        {" · "}Last fetch:{" "}
-        {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
+        {" · "}Last fetch: {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
         {lastError ? (
           <>
             {" · "}
@@ -155,22 +139,17 @@ export default function AdminIncomingPage() {
       {loadedOnce && !cards.length && !lastError && (
         <div style={{ opacity: 0.7 }}>No new orders or reservations.</div>
       )}
-
-      {!loadedOnce && !lastError && (
-        <div style={{ opacity: 0.7 }}>Connecting…</div>
-      )}
-
+      {!loadedOnce && !lastError && <div style={{ opacity: 0.7 }}>Connecting…</div>}
       {lastError && (
         <div style={{ color: "#b91c1c", marginBottom: 8 }}>
-          Couldn’t load incoming cards. Check admin auth/CSRF/CORS and the
-          /admin incoming endpoint.
+          Couldn’t load incoming cards. Check admin auth/CSRF/CORS and the /admin incoming endpoint.
         </div>
       )}
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
+          gridTemplateColumns: "repeat(auto-fill,minmax(360px,1fr))",
           gap: 16,
         }}
       >
@@ -180,7 +159,6 @@ export default function AdminIncomingPage() {
             card={c}
             onConfirm={onConfirm}
             onCancel={onCancel}
-            onSaveMinutes={onSaveMinutes}
           />
         ))}
       </div>
@@ -190,153 +168,177 @@ export default function AdminIncomingPage() {
 
 function Card(props: {
   card: NewOrderCardDTO;
-  onConfirm: (
-    c: NewOrderCardDTO,
-    extraMinutes?: number
-  ) => void | Promise<void>;
+  onConfirm: (c: NewOrderCardDTO, extraMinutes?: number) => void | Promise<void>;
   onCancel: (c: NewOrderCardDTO) => void | Promise<void>;
-  onSaveMinutes: (c: NewOrderCardDTO, mins: number) => void | Promise<void>;
 }) {
-  const { card, onConfirm, onCancel, onSaveMinutes } = props;
-  const [mins, setMins] = React.useState<number>(
-    card.timing.adminExtraMinutes ?? 0
-  );
+  const { card, onConfirm, onCancel } = props;
 
   const isOrder = card.kind === "menu" || card.kind === "buffet";
   const isASAP = !!card.timing.asap;
-  const canAdjust = isOrder && isASAP; // admin can add minutes only if ASAP
+
+  // extra minutes bubbles (base 45; these are *extra* minutes)
+  const EXTRA_CHOICES = [10, 15, 20, 30] as const;
+  const [extra, setExtra] = React.useState<number>(card.timing.adminExtraMinutes ?? 0);
+
+  const orderLabel =
+    card.kind === "menu"
+      ? `Order: ${String(card.orderType ?? "").toUpperCase()}`
+      : card.kind === "buffet"
+      ? `Buffet order: ${String(card.orderType ?? "").toUpperCase()}`
+      : "Reservation";
+
+  const titleLabel = (() => {
+    if (card.kind === "reservation") return "Reservation";
+    const mode = String(card.orderType ?? "").toUpperCase() === "DELIVERY" ? "Delivery" : "Takeaway";
+    const req = isASAP
+      ? "Now"
+      : card.timing.requestedAt
+      ? formatZurich(card.timing.requestedAt)
+      : "—";
+    return `${mode}: ${req}`;
+  })();
 
   return (
     <div
       style={{
-        border: "1px solid #ddd",
-        borderRadius: 12,
+        border: `1px solid ${BORDER}`,
+        borderRadius: 14,
         padding: 14,
         background: "#fff",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: 8,
-        }}
-      >
-        <strong style={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
-          {badge(card)}
-        </strong>
-        <div style={{ opacity: 0.7 }}>
-          Created: {formatZurich(card.createdAt)}
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>{orderLabel}</div>
+        <div style={{ opacity: 0.7, fontSize: 12 }}>
+          Created: <b>{formatZurich(card.createdAt)}</b>
         </div>
       </div>
+      <div style={{ fontSize: 16, fontWeight: 800 }}>{titleLabel}</div>
 
-      <section style={{ marginBottom: 8 }}>
-        <div>
-          <strong>
-            {card.customerInfo.firstName} {card.customerInfo.lastName}
-          </strong>{" "}
-          · {card.customerInfo.phone}
+      <hr style={{ border: 0, borderTop: "1px solid #EFEBDD", margin: "6px 0 8px" }} />
+
+      {/* Items first */}
+      {card.kind !== "reservation" && card.menuItems?.length ? (
+        <ItemsList
+          title="Menu items"
+          items={card.menuItems.map((i) => ({ name: i.menuItemName || "—", qty: i.quantity }))}
+        />
+      ) : null}
+      {card.kind !== "reservation" && card.buffetItems?.length ? (
+        <ItemsList
+          title="Buffet items"
+          items={card.buffetItems.map((i) => ({ name: i.name || "—", qty: i.quantity }))}
+        />
+      ) : null}
+
+      {/* Customer */}
+      <section style={{ display: "grid", gridTemplateColumns: "1fr", gap: 2 }}>
+        <div style={{ fontWeight: 700 }}>
+          {card.customerInfo.firstName} {card.customerInfo.lastName}
+          {card.customerInfo.phone ? <span style={{ opacity: 0.7, fontWeight: 500 }}> · {card.customerInfo.phone}</span> : null}
         </div>
-        <div style={{ opacity: 0.8 }}>{card.customerInfo.email}</div>
+        {card.customerInfo.email ? (
+          <div style={{ opacity: 0.8, fontSize: 13 }}>{card.customerInfo.email}</div>
+        ) : null}
         {card.customerInfo.address && (
-          <div style={{ opacity: 0.8 }}>
-            {card.customerInfo.address.street}{" "}
-            {card.customerInfo.address.streetNo},{" "}
+          <div style={{ opacity: 0.8, fontSize: 13 }}>
+            {card.customerInfo.address.street} {card.customerInfo.address.streetNo},{" "}
             {card.customerInfo.address.plz} {card.customerInfo.address.city}
           </div>
         )}
       </section>
 
+      {/* Special instructions */}
       {!!card.specialInstructions && (
-        <div style={{ fontStyle: "italic", marginBottom: 8 }}>
+        <div
+          style={{
+            background: "#fff8e1",
+            border: "1px solid #f7e2a4",
+            color: "#7a5d00",
+            padding: "8px 10px",
+            borderRadius: 10,
+            fontStyle: "italic",
+          }}
+        >
           {card.specialInstructions}
         </div>
       )}
 
-      {/* Menu items */}
-      {card.kind !== "reservation" &&
-        card.menuItems &&
-        card.menuItems.length > 0 && (
-          <ItemsList
-            title="Menu items"
-            items={card.menuItems.map((i) => ({
-              name: i.menuItemName || "—",
-              qty: i.quantity,
-            }))}
-          />
-        )}
-
-      {/* Buffet items */}
-      {card.kind !== "reservation" &&
-        card.buffetItems &&
-        card.buffetItems.length > 0 && (
-          <ItemsList
-            title="Buffet items"
-            items={card.buffetItems.map((i) => ({
-              name: i.name || "—",
-              qty: i.quantity,
-            }))}
-          />
-        )}
-
-      <section style={{ marginTop: 8, marginBottom: 12 }}>
-        {isASAP ? (
-          <div>
-            Ready about:{" "}
-            <strong>
-              {formatZurich(card.timing.committedReadyAt || card.createdAt)}
-            </strong>
-          </div>
-        ) : card.kind === "reservation" ? (
-          <div>
-            Time:{" "}
-            <strong>
-              {formatZurich(
-                card.timing.committedReadyAt || card.timing.requestedAt!
-              )}
-            </strong>
-          </div>
-        ) : (
-          <div>
-            Requested: <strong>{formatZurich(card.timing.requestedAt!)}</strong>
-          </div>
-        )}
-      </section>
-
-      {canAdjust && (
+      {/* ASAP extra-minute bubbles */}
+      {isOrder && isASAP && (
         <div
           style={{
             display: "flex",
-            gap: 8,
+            flexWrap: "wrap",
             alignItems: "center",
-            marginBottom: 10,
+            gap: 8,
+            padding: 10,
+            border: `1px dashed ${BORDER}`,
+            borderRadius: 10,
+            background: "#faf9f3",
           }}
         >
-          <label style={{ fontWeight: 600 }}>Add minutes:</label>
-          <input
-            type="number"
-            min={0}
-            step={5}
-            value={mins}
-            onChange={(e) => setMins(Math.max(0, Number(e.target.value ?? 0)))}
-            style={{ width: 90, padding: "6px 8px" }}
-          />
-          <button onClick={() => onSaveMinutes(card, mins)} style={linkBtn}>
-            Save
-          </button>
+          <div style={{ fontWeight: 700, marginRight: 8 }}>Add minutes</div>
+          {EXTRA_CHOICES.map((n) => {
+            const active = extra === n;
+            return (
+              <button
+                key={n}
+                onClick={() => setExtra(n)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${active ? AK_DARK : BORDER}`,
+                  background: active ? AK_DARK : "#fff",
+                  color: active ? "#EFE7CE" : AK_DARK,
+                  cursor: "pointer",
+                  fontWeight: 800,
+                }}
+              >
+                +{n}
+              </button>
+            );
+          })}
+          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.8 }}>
+            Base prep: <b>45 min</b> {extra ? `+ ${extra} = ~${45 + extra} min` : ""}
+          </div>
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8 }}>
-        {/* Confirm also for reservations */}
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
         <button
-          onClick={() => onConfirm(card, canAdjust ? mins : undefined)}
-          style={primaryBtn}
+          onClick={() => onConfirm(card, isOrder && isASAP ? extra : undefined)}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid transparent",
+            cursor: "pointer",
+            fontWeight: 800,
+            background: AK_DARK,
+            color: "#EFE7CE",
+          }}
+          title={isOrder && isASAP ? `Confirm with +${extra} minutes` : "Confirm"}
         >
           Confirm
         </button>
-        <button onClick={() => onCancel(card)} style={dangerBtn}>
+        <button
+          onClick={() => onCancel(card)}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid transparent",
+            cursor: "pointer",
+            fontWeight: 800,
+            background: "#ef4444",
+            color: "#fff",
+          }}
+        >
           Cancel
         </button>
       </div>
@@ -352,44 +354,16 @@ function ItemsList({
   items: { name: string; qty: number }[];
 }) {
   return (
-    <div style={{ marginBottom: 6 }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{title}</div>
-      <ul style={{ margin: 0, paddingLeft: 18 }}>
-        {items.map((it, i: number) => (
-          <li key={i}>
-            {it.name} · x {it.qty}
-          </li>
+    <div style={{ marginTop: 2 }}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4 }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ display: "contents" }}>
+            <div>{it.name}</div>
+            <div style={{ textAlign: "right", color: MUTED }}>× {it.qty}</div>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
-
-function badge(c: NewOrderCardDTO) {
-  if (c.kind === "menu") return `menu · ${c.orderType}`;
-  if (c.kind === "buffet") return "buffet";
-  return "reservation";
-}
-
-const baseBtn: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid transparent",
-  cursor: "pointer",
-};
-const primaryBtn: React.CSSProperties = {
-  ...baseBtn,
-  background: "#0ea5e9",
-  color: "#fff",
-};
-const dangerBtn: React.CSSProperties = {
-  ...baseBtn,
-  background: "#ef4444",
-  color: "#fff",
-};
-const linkBtn: React.CSSProperties = {
-  ...baseBtn,
-  background: "transparent",
-  color: "#0ea5e9",
-  borderColor: "#0ea5e9",
-};

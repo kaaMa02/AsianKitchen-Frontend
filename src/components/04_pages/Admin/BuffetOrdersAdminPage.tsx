@@ -1,13 +1,33 @@
-// src/components/04_pages/Admin/BuffetOrdersAdminPage.tsx
+// frontend/src/components/04_pages/Admin/BuffetOrdersAdminPage.tsx
 import * as React from "react";
 import {
-  Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody, Chip,
-  Select, MenuItem, FormControl, SelectChangeEvent, IconButton, Accordion, AccordionSummary, AccordionDetails
+  Paper,
+  Typography,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Chip,
+  Select,
+  MenuItem,
+  FormControl,
+  SelectChangeEvent,
+  IconButton,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import PrintIcon from "@mui/icons-material/Print";
-import { listAllBuffetOrders, updateBuffetOrderStatus } from "../../../services/buffetOrders";
-import { autoPrintNewPaid, printCustomerOrderReceipt } from "../../../services/printing";
+import {
+  listAllBuffetOrders,
+  updateBuffetOrderStatus,
+} from "../../../services/buffetOrders";
+import {
+  autoPrintNewPaid,
+  printCustomerOrderReceipt,
+} from "../../../services/printing";
 import { notifyError, notifySuccess } from "../../../services/toast";
 import { OrderStatus, BuffetOrderReadDTO } from "../../../types/api-types";
 import CellPopover from "../../common/CellPopover";
@@ -21,8 +41,12 @@ const STATUS_OPTIONS: OrderStatus[] = [
   OrderStatus.CANCELLED,
 ];
 
-function prettyPaymentLabel(o: { paymentMethod?: string; paymentStatus?: string }) {
-  const pm = o.paymentMethod; const ps = o.paymentStatus;
+function prettyPaymentLabel(o: {
+  paymentMethod?: string;
+  paymentStatus?: string;
+}) {
+  const pm = o.paymentMethod;
+  const ps = o.paymentStatus;
   if (pm === "CASH" || pm === "TWINT" || pm === "POS_CARD") return pm || "N/A";
   if (pm === "CARD") return ps ? `CARD · ${ps}` : "CARD";
   if (ps && ps !== "NOT_REQUIRED") return ps;
@@ -36,59 +60,107 @@ export default function BuffetOrdersAdminPage() {
 
   const load = async () => {
     setLoading(true);
-    try { setRows(await listAllBuffetOrders() ?? []); }
-    catch (e:any) { notifyError(e?.response?.data?.message || "Failed to load buffet orders"); }
-    finally { setLoading(false); }
+    try {
+      setRows((await listAllBuffetOrders()) ?? []);
+    } catch (e: any) {
+      notifyError(e?.response?.data?.message || "Failed to load buffet orders");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  React.useEffect(() => { void load(); }, []);
-  React.useEffect(() => { if (rows.length) void autoPrintNewPaid(rows as any); }, [rows]);
+  React.useEffect(() => {
+    void load();
+  }, []);
+  React.useEffect(() => {
+    if (rows.length) void autoPrintNewPaid(rows as any);
+  }, [rows]);
 
   const onChangeStatus = async (id: string, next: OrderStatus) => {
     try {
       setSavingId(id);
       await updateBuffetOrderStatus(id, next);
-      setRows(prev => prev.map(o => String(o.id) === id ? { ...o, status: next } : o));
+      setRows((prev) =>
+        prev.map((o) => (String(o.id) === id ? { ...o, status: next } : o))
+      );
       notifySuccess("Order status updated");
-    } catch (e:any) {
+    } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to update status");
       await load();
-    } finally { setSavingId(null); }
+    } finally {
+      setSavingId(null);
+    }
   };
 
-  const nonNew = rows.filter(o => o.status !== OrderStatus.NEW);
-  const active = nonNew.filter(o => [OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.ON_THE_WAY].includes(o.status));
-  const done = nonNew.filter(o => o.status === OrderStatus.DELIVERED);
-  const cancelled = nonNew.filter(o => o.status === OrderStatus.CANCELLED);
+  const nonNew = rows.filter((o) => o.status !== OrderStatus.NEW);
+  const active = nonNew.filter((o) =>
+    [
+      OrderStatus.CONFIRMED,
+      OrderStatus.PREPARING,
+      OrderStatus.ON_THE_WAY,
+    ].includes(o.status)
+  );
+  const done = nonNew.filter((o) => o.status === OrderStatus.DELIVERED);
+  const cancelled = nonNew.filter((o) => o.status === OrderStatus.CANCELLED);
 
   return (
-    <Paper elevation={0} sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}>
-      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Buffet Orders</Typography>
+    <Paper
+      elevation={0}
+      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+    >
+      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
+        Buffet Orders
+      </Typography>
 
       <Section title={`Active (${active.length})`} defaultExpanded>
-        <OrdersTable rows={active} savingId={savingId} onChangeStatus={onChangeStatus} />
+        <OrdersTable
+          rows={active}
+          savingId={savingId}
+          onChangeStatus={onChangeStatus}
+        />
       </Section>
 
       <Section title={`Done / Delivered (${done.length})`}>
-        <OrdersTable rows={done} savingId={savingId} onChangeStatus={onChangeStatus} />
+        <OrdersTable
+          rows={done}
+          savingId={savingId}
+          onChangeStatus={onChangeStatus}
+        />
       </Section>
 
       <Section title={`Cancelled (${cancelled.length})`}>
-        <OrdersTable rows={cancelled} savingId={savingId} onChangeStatus={onChangeStatus} />
+        <OrdersTable
+          rows={cancelled}
+          savingId={savingId}
+          onChangeStatus={onChangeStatus}
+        />
       </Section>
     </Paper>
   );
 }
 
-function Section(props: any) { return (
-  <Accordion defaultExpanded={props.defaultExpanded} disableGutters sx={{ mb: 2, border: "1px solid #E2D9C2" }}>
-    <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography sx={{ fontWeight: 700 }}>{props.title}</Typography></AccordionSummary>
-    <AccordionDetails>{props.children}</AccordionDetails>
-  </Accordion>
-); }
+function Section(props: any) {
+  return (
+    <Accordion
+      defaultExpanded={props.defaultExpanded}
+      disableGutters
+      sx={{ mb: 2, border: "1px solid #E2D9C2" }}
+    >
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <Typography sx={{ fontWeight: 700 }}>{props.title}</Typography>
+      </AccordionSummary>
+      <AccordionDetails>{props.children}</AccordionDetails>
+    </Accordion>
+  );
+}
 
-function OrdersTable({ rows, savingId, onChangeStatus }:{
-  rows: BuffetOrderReadDTO[]; savingId: string | null;
+function OrdersTable({
+  rows,
+  savingId,
+  onChangeStatus,
+}: {
+  rows: BuffetOrderReadDTO[];
+  savingId: string | null;
   onChangeStatus: (id: string, next: OrderStatus) => void | Promise<void>;
 }) {
   return (
@@ -96,6 +168,7 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
       <TableHead>
         <TableRow>
           <TableCell>Created</TableCell>
+          <TableCell>Requested</TableCell>
           <TableCell>Customer</TableCell>
           <TableCell>Items</TableCell>
           <TableCell>Type</TableCell>
@@ -106,8 +179,12 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
         </TableRow>
       </TableHead>
       <TableBody>
-        {rows.length === 0 && <TableRow><TableCell colSpan={8}>No orders</TableCell></TableRow>}
-        {rows.map(o => {
+        {rows.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={9}>No orders</TableCell>
+          </TableRow>
+        )}
+        {rows.map((o) => {
           const id = String(o.id);
           const canPrint =
             o.paymentStatus === "SUCCEEDED" ||
@@ -116,39 +193,59 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
             o.paymentMethod === "TWINT" ||
             o.paymentMethod === "POS_CARD";
 
+          const requestedAt: string | undefined =
+            (o as any).requestedAt || (o as any).timing?.requestedAt;
+          const asap: boolean =
+            Boolean((o as any).timing?.asap) || !requestedAt;
+
           return (
             <TableRow key={id}>
               <TableCell>{formatZurich(String(o.createdAt))}</TableCell>
-
               <TableCell>
-                <CellPopover label={`${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`}>
-                  <div><strong>{o.customerInfo?.firstName} {o.customerInfo?.lastName}</strong></div>
+                {asap ? "ASAP" : formatZurich(String(requestedAt))}
+              </TableCell>
+              <TableCell>
+                <CellPopover
+                  label={`${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`}
+                >
+                  <div>
+                    <strong>
+                      {o.customerInfo?.firstName} {o.customerInfo?.lastName}
+                    </strong>
+                  </div>
                   <div>{o.customerInfo?.email}</div>
                   <div>{o.customerInfo?.phone}</div>
                   {o.customerInfo?.address && (
                     <div>
-                      {o.customerInfo.address.street} {o.customerInfo.address.streetNo},{" "}
+                      {o.customerInfo.address.street}{" "}
+                      {o.customerInfo.address.streetNo},{" "}
                       {o.customerInfo.address.plz} {o.customerInfo.address.city}
                     </div>
                   )}
                 </CellPopover>
               </TableCell>
-
               <TableCell>
                 <CellPopover label="View items">
                   <ul style={{ margin: 0, paddingLeft: 18 }}>
                     {(o.orderItems ?? []).map((it, i) => (
-                      <li key={i}>{it.name ?? "—"} · x {it.quantity}</li>
+                      <li key={i}>
+                        {it.name ?? "—"} · x {it.quantity}
+                      </li>
                     ))}
                   </ul>
                 </CellPopover>
               </TableCell>
-
               <TableCell>{o.orderType}</TableCell>
               <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
-              <TableCell><Chip label={o.status} size="small" /></TableCell>
               <TableCell>
-                <Chip label={prettyPaymentLabel(o)} size="small" color={canPrint ? "success" : "default"} />
+                <Chip label={o.status} size="small" />
+              </TableCell>
+              <TableCell>
+                <Chip
+                  label={prettyPaymentLabel(o)}
+                  size="small"
+                  color={canPrint ? "success" : "default"}
+                />
               </TableCell>
               <TableCell align="right">
                 <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
@@ -156,14 +253,18 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
                     value={o.status as string}
                     onChange={(e: SelectChangeEvent<string>) => {
                       const next = e.target.value as OrderStatus;
-                      if (next && next !== o.status) void onChangeStatus(id, next);
+                      if (next && next !== o.status)
+                        void onChangeStatus(id, next);
                     }}
                     disabled={savingId === id}
                   >
-                    {STATUS_OPTIONS.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+                    {STATUS_OPTIONS.map((s) => (
+                      <MenuItem key={s} value={s}>
+                        {s}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
-
                 <IconButton
                   aria-label="Print receipt"
                   size="small"

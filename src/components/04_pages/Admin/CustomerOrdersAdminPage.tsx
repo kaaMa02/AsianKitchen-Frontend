@@ -1,22 +1,40 @@
+// frontend/src/components/04_pages/Admin/CustomerOrdersAdminPage.tsx
 import * as React from "react";
 import {
-  Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody,
-  Chip, Select, MenuItem, FormControl, SelectChangeEvent, IconButton, Accordion,
-  AccordionSummary, AccordionDetails
+  Paper,
+  Typography,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Chip,
+  Select,
+  MenuItem,
+  FormControl,
+  SelectChangeEvent,
+  IconButton,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import PrintIcon from "@mui/icons-material/Print";
-import { listAllCustomerOrders, updateCustomerOrderStatus } from "../../../services/customerOrders";
-import { autoPrintNewPaid, printCustomerOrderReceipt } from "../../../services/printing";
+import {
+  listAllCustomerOrders,
+  updateCustomerOrderStatus,
+} from "../../../services/customerOrders";
+import {
+  autoPrintNewPaid,
+  printCustomerOrderReceipt,
+} from "../../../services/printing";
 import { notifyError, notifySuccess } from "../../../services/toast";
 import { OrderStatus, CustomerOrderReadDTO } from "../../../types/api-types";
 import { formatZurich } from "../../../utils/datetime";
 import CellPopover from "../../common/CellPopover";
 
-
 const AK_DARK = "#0B2D24";
 
-// Allow changing from any non-NEW status to any other (your ask)
 const STATUS_OPTIONS: OrderStatus[] = [
   OrderStatus.CONFIRMED,
   OrderStatus.PREPARING,
@@ -25,7 +43,10 @@ const STATUS_OPTIONS: OrderStatus[] = [
   OrderStatus.CANCELLED,
 ];
 
-function prettyPaymentLabel(o: { paymentMethod?: string; paymentStatus?: string }) {
+function prettyPaymentLabel(o: {
+  paymentMethod?: string;
+  paymentStatus?: string;
+}) {
   const pm = o.paymentMethod;
   const ps = o.paymentStatus;
   if (pm === "CASH" || pm === "TWINT" || pm === "POS_CARD") return pm || "N/A";
@@ -51,14 +72,20 @@ export default function CustomerOrdersAdminPage() {
     }
   };
 
-  React.useEffect(() => { void load(); }, []);
-  React.useEffect(() => { if (rows.length) void autoPrintNewPaid(rows); }, [rows]);
+  React.useEffect(() => {
+    void load();
+  }, []);
+  React.useEffect(() => {
+    if (rows.length) void autoPrintNewPaid(rows);
+  }, [rows]);
 
   const onChangeStatus = async (id: string, next: OrderStatus) => {
     try {
       setSavingId(id);
       await updateCustomerOrderStatus(id, next);
-      setRows(prev => prev.map(o => String(o.id) === id ? { ...o, status: next } : o));
+      setRows((prev) =>
+        prev.map((o) => (String(o.id) === id ? { ...o, status: next } : o))
+      );
       notifySuccess("Order status updated");
     } catch (e: any) {
       notifyError(e?.response?.data?.message || "Failed to update status");
@@ -68,43 +95,67 @@ export default function CustomerOrdersAdminPage() {
     }
   };
 
-  // Filter out NEW (those live in /admin/incoming)
-  const nonNew = rows.filter(o => o.status !== OrderStatus.NEW);
-
-  const active = nonNew.filter(o =>
-    o.status === OrderStatus.CONFIRMED ||
-    o.status === OrderStatus.PREPARING ||
-    o.status === OrderStatus.ON_THE_WAY
+  const nonNew = rows.filter((o) => o.status !== OrderStatus.NEW);
+  const active = nonNew.filter(
+    (o) =>
+      o.status === OrderStatus.CONFIRMED ||
+      o.status === OrderStatus.PREPARING ||
+      o.status === OrderStatus.ON_THE_WAY
   );
-  const done = nonNew.filter(o => o.status === OrderStatus.DELIVERED);
-  const cancelled = nonNew.filter(o => o.status === OrderStatus.CANCELLED);
+  const done = nonNew.filter((o) => o.status === OrderStatus.DELIVERED);
+  const cancelled = nonNew.filter((o) => o.status === OrderStatus.CANCELLED);
 
   return (
-    <Paper elevation={0} sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}>
+    <Paper
+      elevation={0}
+      sx={{ p: 3, border: "1px solid #E2D9C2", bgcolor: "#f5efdf" }}
+    >
       <Typography variant="h6" sx={{ color: AK_DARK, fontWeight: 800, mb: 2 }}>
         Menu Orders
       </Typography>
 
       <Section title={`Active (${active.length})`} defaultExpanded>
-        <OrdersTable rows={active} savingId={savingId} onChangeStatus={onChangeStatus} />
+        <OrdersTable
+          rows={active}
+          savingId={savingId}
+          onChangeStatus={onChangeStatus}
+        />
       </Section>
 
       <Section title={`Done / Delivered (${done.length})`}>
-        <OrdersTable rows={done} savingId={savingId} onChangeStatus={onChangeStatus} />
+        <OrdersTable
+          rows={done}
+          savingId={savingId}
+          onChangeStatus={onChangeStatus}
+        />
       </Section>
 
       <Section title={`Cancelled (${cancelled.length})`}>
-        <OrdersTable rows={cancelled} savingId={savingId} onChangeStatus={onChangeStatus} />
+        <OrdersTable
+          rows={cancelled}
+          savingId={savingId}
+          onChangeStatus={onChangeStatus}
+        />
       </Section>
     </Paper>
   );
 }
 
-function Section({ title, children, defaultExpanded = false }:{
-  title: string; children: React.ReactNode; defaultExpanded?: boolean;
+function Section({
+  title,
+  children,
+  defaultExpanded = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
 }) {
   return (
-    <Accordion defaultExpanded={defaultExpanded} disableGutters sx={{ mb: 2, border: "1px solid #E2D9C2" }}>
+    <Accordion
+      defaultExpanded={defaultExpanded}
+      disableGutters
+      sx={{ mb: 2, border: "1px solid #E2D9C2" }}
+    >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Typography sx={{ fontWeight: 700 }}>{title}</Typography>
       </AccordionSummary>
@@ -113,7 +164,11 @@ function Section({ title, children, defaultExpanded = false }:{
   );
 }
 
-function OrdersTable({ rows, savingId, onChangeStatus }:{
+function OrdersTable({
+  rows,
+  savingId,
+  onChangeStatus,
+}: {
   rows: CustomerOrderReadDTO[];
   savingId: string | null;
   onChangeStatus: (id: string, next: OrderStatus) => void | Promise<void>;
@@ -123,6 +178,7 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
       <TableHead>
         <TableRow>
           <TableCell>Created</TableCell>
+          <TableCell>Requested</TableCell>
           <TableCell>Customer</TableCell>
           <TableCell>Items</TableCell>
           <TableCell>Type</TableCell>
@@ -134,9 +190,11 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
       </TableHead>
       <TableBody>
         {rows.length === 0 && (
-          <TableRow><TableCell colSpan={8}>No orders</TableCell></TableRow>
+          <TableRow>
+            <TableCell colSpan={9}>No orders</TableCell>
+          </TableRow>
         )}
-        {rows.map(o => {
+        {rows.map((o) => {
           const id = String(o.id);
           const canPrint =
             o.paymentStatus === "SUCCEEDED" ||
@@ -145,67 +203,86 @@ function OrdersTable({ rows, savingId, onChangeStatus }:{
             o.paymentMethod === "TWINT" ||
             o.paymentMethod === "POS_CARD";
 
+          const requestedAt: string | undefined =
+            (o as any).requestedAt || (o as any).timing?.requestedAt;
+          const asap: boolean =
+            Boolean((o as any).timing?.asap) || !requestedAt;
+
           return (
             <TableRow key={id}>
               <TableCell>{formatZurich(String(o.createdAt))}</TableCell>
-
-              {/* Customer popover */}
               <TableCell>
-                <CellPopover label={`${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`}>
-                  <div><strong>{o.customerInfo?.firstName} {o.customerInfo?.lastName}</strong></div>
+                {asap ? "ASAP" : formatZurich(String(requestedAt))}
+              </TableCell>
+              <TableCell>
+                <CellPopover
+                  label={`${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`}
+                >
+                  <div>
+                    <strong>
+                      {o.customerInfo?.firstName} {o.customerInfo?.lastName}
+                    </strong>
+                  </div>
                   <div>{o.customerInfo?.email}</div>
                   <div>{o.customerInfo?.phone}</div>
                   {o.customerInfo?.address && (
                     <div>
-                      {o.customerInfo.address.street} {o.customerInfo.address.streetNo},{" "}
+                      {o.customerInfo.address.street}{" "}
+                      {o.customerInfo.address.streetNo},{" "}
                       {o.customerInfo.address.plz} {o.customerInfo.address.city}
                     </div>
                   )}
                 </CellPopover>
               </TableCell>
-
-              {/* Items popover */}
               <TableCell>
                 <CellPopover label="View items">
                   <ul style={{ margin: 0, paddingLeft: 18 }}>
                     {(o.orderItems ?? []).map((it, i) => (
-                      <li key={i}>{it.menuItemName ?? "—"} · x {it.quantity}</li>
+                      <li key={i}>
+                        {it.menuItemName ?? "—"} · x {it.quantity}
+                      </li>
                     ))}
                   </ul>
                 </CellPopover>
               </TableCell>
-
               <TableCell>{o.orderType}</TableCell>
               <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
-              <TableCell><Chip label={o.status} size="small" /></TableCell>
               <TableCell>
-                <Chip label={prettyPaymentLabel(o)} size="small" color={canPrint ? "success" : "default"} />
+                <Chip label={o.status} size="small" />
               </TableCell>
-
+              <TableCell>
+                <Chip
+                  label={prettyPaymentLabel(o)}
+                  size="small"
+                  color={canPrint ? "success" : "default"}
+                />
+              </TableCell>
               <TableCell align="right">
                 <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
                   <Select
                     value={o.status as string}
                     onChange={(e: SelectChangeEvent<string>) => {
                       const next = e.target.value as OrderStatus;
-                      if (next && next !== o.status) void onChangeStatus(id, next);
+                      if (next && next !== o.status)
+                        void onChangeStatus(id, next);
                     }}
                     disabled={savingId === id}
                   >
-                    {STATUS_OPTIONS.map(s => (
-                      <MenuItem key={s} value={s} disabled={s === o.status && false /* allow re-select */}>
+                    {STATUS_OPTIONS.map((s) => (
+                      <MenuItem key={s} value={s}>
                         {s}
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
-
                 <IconButton
                   aria-label="Print receipt"
                   size="small"
                   onClick={() => printCustomerOrderReceipt(o)}
                   disabled={!canPrint}
-                  title={canPrint ? "Print receipt" : "Print enabled after payment"}
+                  title={
+                    canPrint ? "Print receipt" : "Print enabled after payment"
+                  }
                 >
                   <PrintIcon fontSize="small" />
                 </IconButton>
