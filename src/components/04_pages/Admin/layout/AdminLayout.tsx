@@ -28,10 +28,7 @@ import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useAdminAlerts } from "../../../../contexts/AdminAlertsContext";
 import { setupAdminWebPush } from "../../../../services/webPush";
-
-// Gesture-based audio unlock (see utils/audio.ts)
-import { SoundRegistry } from "../../../../utils/audio";
-const soundUnlock = new SoundRegistry("/sounds/incoming.mp3");
+import { sound } from "../../../../utils/audio";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -47,9 +44,8 @@ export default function AdminLayout() {
   const [open, setOpen] = React.useState(false);
   const loc = useLocation();
   const { logout, username } = useAuth();
-  const { total } = useAdminAlerts(); // we’ll show a single badge only for Incoming
+  const { total } = useAdminAlerts();
 
-  // Register service worker + subscribe to web push once per admin session
   React.useEffect(() => {
     setupAdminWebPush().catch(() => {});
   }, []);
@@ -57,7 +53,7 @@ export default function AdminLayout() {
   // One-time user gesture unlock for audio autoplay
   React.useEffect(() => {
     const onGesture = () => {
-      soundUnlock.enable().catch(() => {});
+      sound.enable().catch(() => {});
     };
     window.addEventListener("click", onGesture, { once: true });
     window.addEventListener("keydown", onGesture, { once: true });
@@ -68,7 +64,7 @@ export default function AdminLayout() {
   }, []);
 
   const links: LinkDef[] = [
-    // ✅ Only this entry shows the combined "incoming" badge
+    // Only this entry shows the combined "incoming" badge
     { to: "/admin", label: "New Orders, Reservations", icon: <DashboardIcon />, badge: total },
 
     { to: "/admin/discounts", label: "Discounts", icon: <LocalOfferIcon /> },
