@@ -1,7 +1,11 @@
-// utils/audio.ts
-export class CardSound {
+// Single-channel looped bell with per-card TTL.
+// API stays the same: sound.enable(), sound.start(id), sound.stop(id), sound.stopAll()
+
+export class SingleBell {
   private audio: HTMLAudioElement;
-  private timeout: number | null = null;
+  private unlocked = false;
+  private active = new Map<string, number>(); // id -> expiresAt (ms)
+  private timer: number | null = null;
 
   constructor(src = "/sounds/incoming.mp3") {
     this.audio = new Audio(src);
@@ -10,17 +14,46 @@ export class CardSound {
     this.audio.volume = 1.0;
   }
 
-  async start(durationMs = 60000) {
-    try { await this.audio.play(); } catch {}
-    this.timeout = window.setTimeout(() => this.stop(), durationMs);
+  private ensureTimer() {
+    if (this.timer !== null) return;
+    this.timer = window.setInterval(() => this.pulse(), 250);
   }
 
-  stop() {
-    try { this.audio.pause(); this.audio.currentTime = 0; } catch {}
-    if (this.timeout !== null) { window.clearTimeout(this.timeout); this.timeout = null; }
+  private async playIfNeeded() {
+    if (this.audio.paused) {
+      try {
+        await this.audio.play();
+      } catch {}
+    }
   }
 
-  async unlock() {
+  private stopIfPlaying() {
+    try {
+      this.audio.pause();
+      this.audio.currentTime = 0;
+    } catch {}
+  }
+
+  private pulse() {
+    const now = Date.now();
+    const toDelete: string[] = [];
+    this.active.forEach((until, id) => {
+      if (until <= now) toDelete.push(id);
+    });
+    // drop expired ids
+    for (let i = 0; i < toDelete.length; i++) {
+      this.active.delete(toDelete[i]);
+    }
+    if (this.active.size > 0) {
+      void this.playIfNeeded();
+    } else {
+      this.stopIfPlaying();
+    }
+  }
+
+  async enable() {
+    if (this.unlocked) return;
+    this.unlocked = true;
     try {
       this.audio.muted = true;
       await this.audio.play();
@@ -29,30 +62,28 @@ export class CardSound {
       this.audio.muted = false;
     } catch {}
   }
-}
 
-export class SoundRegistry {
-  private map = new Map<string, CardSound>();
-  private unlocked = false;
-  constructor(private src = "/sounds/incoming.mp3") {}
-
-  ensure(id: string) {
-    if (this.map.has(id)) return this.map.get(id)!;
-    const s = new CardSound(this.src);
-    if (this.unlocked) s.unlock().catch(() => {});
-    this.map.set(id, s);
-    return s;
+  /** Start/refresh TTL for this id. Default 60s. */
+  start(id: string, durationMs = 60000) {
+    const until = Date.now() + Math.max(0, durationMs);
+    this.active.set(id, until);
+    this.ensureTimer();
+    this.pulse();
   }
 
-  async enable() {
-    if (this.unlocked) return;
-    this.unlocked = true;
-    await Promise.all(Array.from(this.map.values()).map((s) => s.unlock()));
+  /** Stop ringing on behalf of this id (e.g., card removed). */
+  stop(id: string) {
+    if (this.active.has(id)) {
+      this.active.delete(id);
+      this.pulse();
+    }
   }
 
-  start(id: string) { this.ensure(id).start(); }
-  stop(id: string) { const s = this.map.get(id); if (s) { s.stop(); this.map.delete(id); } }
-  stopAll() { this.map.forEach(s => s.stop()); this.map.clear(); }
+  /** Hard stop everything. */
+  stopAll() {
+    this.active.clear();
+    this.pulse();
+  }
 }
 
-export const sound = new SoundRegistry("/sounds/incoming.mp3");
+export const sound = new SingleBell("/sounds/incoming.mp3");
