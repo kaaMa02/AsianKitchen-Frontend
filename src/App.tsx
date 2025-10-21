@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Box } from "@mui/material";
 
 import Navbar from "./components/02_molecules/NavBar";
@@ -35,9 +35,12 @@ const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
 
 export default function App() {
+  const loc = useLocation(); 
   useEffect(() => {
     bootstrapCsrf().catch(() => {});
   }, []);
+
+  const isAdmin = loc.pathname.startsWith("/admin");
 
   return (
     <ErrorBoundary fallback={<PageLoader />}>
@@ -85,7 +88,7 @@ export default function App() {
       </Suspense>
 
       <ScrollToHash />
-      <Footer />
+      {!isAdmin && <Footer />}
     </ErrorBoundary>
   );
 }

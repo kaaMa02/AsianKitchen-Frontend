@@ -10,6 +10,9 @@ import { formatZurich } from "../../../utils/datetime";
 import { NewOrderCardDTO } from "../../../types/api-types";
 import { sound } from "../../../utils/audio";
 import { markAlertsSeen } from "../../../services/alerts";
+import { getCustomerOrder } from "../../../services/customerOrders";
+import { getBuffetOrder } from "../../../services/buffetOrders";
+import { printCustomerOrderReceipt } from "../../../services/printing";
 
 type Kind = "menu" | "buffet" | "reservation";
 
@@ -24,10 +27,16 @@ export default function AdminIncomingPage() {
   const [lastStatus, setLastStatus] = React.useState<string>("—");
   const [lastFetchAt, setLastFetchAt] = React.useState<number | null>(null);
 
+  // filter bar state
+  const [showMenu, setShowMenu] = React.useState(true);
+  const [showBuffet, setShowBuffet] = React.useState(true);
+  const [showReservations, setShowReservations] = React.useState(true);
+
   const prevIds = React.useRef<Set<string>>(new Set());
   const seenOnce = React.useRef<Set<string>>(new Set());
   const inflight = React.useRef<boolean>(false);
 
+  // one-time audio unlock
   React.useEffect(() => {
     const unlock = () => {
       sound.enable().catch(() => {});
@@ -40,10 +49,12 @@ export default function AdminIncomingPage() {
     };
   }, []);
 
+  // zero all red badges on entry
   React.useEffect(() => {
     markAlertsSeen(["orders", "buffet", "reservations"]).catch(() => {});
   }, []);
 
+  // polling
   React.useEffect(() => {
     let aborted = false;
     const ctrl = new AbortController();
@@ -63,6 +74,7 @@ export default function AdminIncomingPage() {
         const newIds = new Set(data.map((d) => `${d.kind}:${d.id}`));
         const oldIds = prevIds.current;
 
+        // start sound for truly new cards, mark seen (server)
         for (const d of data) {
           const k = `${d.kind}:${d.id}`;
           if (!oldIds.has(k)) {
@@ -74,6 +86,7 @@ export default function AdminIncomingPage() {
           }
         }
 
+        // stop sound for cards that disappeared
         oldIds.forEach((k) => {
           if (!newIds.has(k)) sound.stop(k);
         });
@@ -84,7 +97,9 @@ export default function AdminIncomingPage() {
         const msg = err?.response?.status
           ? `${err.response.status} ${err.response.statusText || ""}`.trim()
           : err?.message || "Unknown error";
-        setLastStatus(err?.response?.status ? String(err.response.status) : "ERR");
+        setLastStatus(
+          err?.response?.status ? String(err.response.status) : "ERR"
+        );
         setLastError(msg);
         console.error("[incoming] poll failed:", err);
       } finally {
@@ -104,30 +119,59 @@ export default function AdminIncomingPage() {
     };
   }, []);
 
-  const onConfirm = async (c: NewOrderCardDTO, extraMinutes?: number) => {
-    await confirmOrder(c.kind as Kind, c.id, extraMinutes);
-    const key = `${c.kind}:${c.id}`;
+  const removeCard = React.useCallback((kind: string, id: string) => {
+    const key = `${kind}:${id}`;
     sound.stop(key);
     prevIds.current.delete(key);
-    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
+    setCards((prev) =>
+      prev.filter((x) => !(x.kind === kind && String(x.id) === id))
+    );
+    // stop any lingering sound if list becomes empty
+    setTimeout(() => {
+      if (!prevIds.current.size) sound.stopAll();
+    }, 0);
+  }, []);
+
+  const onConfirm = async (c: NewOrderCardDTO, extraMinutes?: number) => {
+    await confirmOrder(c.kind as Kind, c.id, extraMinutes, true);
+    // print immediately for menu/buffet
+    try {
+      if (c.kind === "menu") {
+        const full = await getCustomerOrder(String(c.id));
+        await printCustomerOrderReceipt(full as any);
+      } else if (c.kind === "buffet") {
+        const full = await getBuffetOrder(String(c.id));
+        await printCustomerOrderReceipt(full as any);
+      }
+    } catch {
+      /* non-fatal: printing is best-effort */
+    }
+    removeCard(c.kind, String(c.id));
   };
 
   const onCancel = async (c: NewOrderCardDTO) => {
     const reason = window.prompt("Reason (optional):") || "";
     await cancelOrder(c.kind as Kind, c.id, reason, false);
-    const key = `${c.kind}:${c.id}`;
-    sound.stop(key);
-    prevIds.current.delete(key);
-    setCards((prev) => prev.filter((x) => !(x.kind === c.kind && x.id === c.id)));
+    removeCard(c.kind, String(c.id));
   };
+
+  const filtered = cards.filter((c) =>
+    c.kind === "menu"
+      ? showMenu
+      : c.kind === "buffet"
+      ? showBuffet
+      : showReservations
+  );
 
   return (
     <div className="container" style={{ padding: "16px 20px" }}>
       <h1 style={{ marginBottom: 8 }}>Incoming (NEW)</h1>
 
-      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
+      {/* tiny debug strip */}
+      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
         Status: <b>{lastStatus}</b>
-        {" · "}Last fetch: {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
+        {" · "}Last fetch:{" "}
+        {lastFetchAt ? new Date(lastFetchAt).toLocaleTimeString() : "—"}
         {lastError ? (
           <>
             {" · "}
@@ -136,24 +180,55 @@ export default function AdminIncomingPage() {
         ) : null}
       </div>
 
-      {loadedOnce && !cards.length && !lastError && (
+      {/* Filter bar */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          marginBottom: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ fontWeight: 700, marginRight: 4 }}>Show:</span>
+        <Toggle
+          label="Menu orders"
+          active={showMenu}
+          onClick={() => setShowMenu((v) => !v)}
+        />
+        <Toggle
+          label="Buffet orders"
+          active={showBuffet}
+          onClick={() => setShowBuffet((v) => !v)}
+        />
+        <Toggle
+          label="Reservations"
+          active={showReservations}
+          onClick={() => setShowReservations((v) => !v)}
+        />
+      </div>
+
+      {loadedOnce && !filtered.length && !lastError && (
         <div style={{ opacity: 0.7 }}>No new orders or reservations.</div>
       )}
-      {!loadedOnce && !lastError && <div style={{ opacity: 0.7 }}>Connecting…</div>}
+      {!loadedOnce && !lastError && (
+        <div style={{ opacity: 0.7 }}>Connecting…</div>
+      )}
       {lastError && (
         <div style={{ color: "#b91c1c", marginBottom: 8 }}>
-          Couldn’t load incoming cards. Check admin auth/CSRF/CORS and the /admin incoming endpoint.
+          Couldn’t load incoming cards. Check admin auth/CSRF/CORS and the
+          /admin incoming endpoint.
         </div>
       )}
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(360px,1fr))",
-          gap: 16,
+          gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
+          gap: 12,
         }}
       >
-        {cards.map((c) => (
+        {filtered.map((c) => (
           <Card
             key={`${c.kind}:${c.id}`}
             card={c}
@@ -166,9 +241,39 @@ export default function AdminIncomingPage() {
   );
 }
 
+function Toggle({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "6px 10px",
+        borderRadius: 999,
+        border: `1px solid ${active ? AK_DARK : BORDER}`,
+        background: active ? AK_DARK : "#fff",
+        color: active ? "#EFE7CE" : AK_DARK,
+        cursor: "pointer",
+        fontWeight: 800,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function Card(props: {
   card: NewOrderCardDTO;
-  onConfirm: (c: NewOrderCardDTO, extraMinutes?: number) => void | Promise<void>;
+  onConfirm: (
+    c: NewOrderCardDTO,
+    extraMinutes?: number
+  ) => void | Promise<void>;
   onCancel: (c: NewOrderCardDTO) => void | Promise<void>;
 }) {
   const { card, onConfirm, onCancel } = props;
@@ -178,79 +283,127 @@ function Card(props: {
 
   // extra minutes bubbles (base 45; these are *extra* minutes)
   const EXTRA_CHOICES = [10, 15, 20, 30] as const;
-  const [extra, setExtra] = React.useState<number>(card.timing.adminExtraMinutes ?? 0);
+  const [extra, setExtra] = React.useState<number>(
+    card.timing.adminExtraMinutes ?? 0
+  );
 
-  const orderLabel =
-    card.kind === "menu"
-      ? `Order: ${String(card.orderType ?? "").toUpperCase()}`
-      : card.kind === "buffet"
-      ? `Buffet order: ${String(card.orderType ?? "").toUpperCase()}`
-      : "Reservation";
+  const orderValue =
+    card.kind === "reservation"
+      ? "Reservation"
+      : String(card.orderType ?? "").toUpperCase();
 
-  const titleLabel = (() => {
-    if (card.kind === "reservation") return "Reservation";
-    const mode = String(card.orderType ?? "").toUpperCase() === "DELIVERY" ? "Delivery" : "Takeaway";
-    const req = isASAP
-      ? "Now"
-      : card.timing.requestedAt
+  const deliverValue = (() => {
+    if (card.kind === "reservation")
+      return formatZurich(card.timing.committedReadyAt);
+    if (isASAP) return "Now";
+    return card.timing.requestedAt
       ? formatZurich(card.timing.requestedAt)
       : "—";
-    return `${mode}: ${req}`;
   })();
+
+  // subtle “popping” tints per kind
+  const tint =
+    card.kind === "menu"
+      ? "#fff8ee"
+      : card.kind === "buffet"
+      ? "#eefaf3"
+      : "#eef3ff";
+  const accent =
+    card.kind === "menu"
+      ? "#f59e0b"
+      : card.kind === "buffet"
+      ? "#22c55e"
+      : "#3b82f6";
 
   return (
     <div
       style={{
         border: `1px solid ${BORDER}`,
-        borderRadius: 14,
-        padding: 14,
-        background: "#fff",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        borderLeft: `4px solid ${accent}`,
+        borderRadius: 12,
+        padding: 12,
+        background: tint,
+        boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 8,
       }}
     >
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>{orderLabel}</div>
-        <div style={{ opacity: 0.7, fontSize: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+        }}
+      >
+        <div style={{ fontSize: 14 }}>
+          <span style={{ opacity: 0.85 }}>Order:</span>{" "}
+          <span style={{ fontWeight: 800 }}>{orderValue}</span>
+        </div>
+        <div style={{ opacity: 0.8, fontSize: 12 }}>
           Created: <b>{formatZurich(card.createdAt)}</b>
         </div>
       </div>
-      <div style={{ fontSize: 16, fontWeight: 800 }}>{titleLabel}</div>
+      <div style={{ fontSize: 15 }}>
+        <span style={{ opacity: 0.85 }}>Delivery:</span>{" "}
+        <span style={{ fontWeight: 800 }}>{deliverValue}</span>
+      </div>
 
-      <hr style={{ border: 0, borderTop: "1px solid #EFEBDD", margin: "6px 0 8px" }} />
+      <hr
+        style={{
+          border: 0,
+          borderTop: "1px solid #EFEBDD",
+          margin: "6px 0 6px",
+        }}
+      />
 
       {/* Items first */}
       {card.kind !== "reservation" && card.menuItems?.length ? (
         <ItemsList
           title="Menu items"
-          items={card.menuItems.map((i) => ({ name: i.menuItemName || "—", qty: i.quantity }))}
+          items={card.menuItems.map((i) => ({
+            name: i.menuItemName || "—",
+            qty: i.quantity,
+          }))}
         />
       ) : null}
       {card.kind !== "reservation" && card.buffetItems?.length ? (
         <ItemsList
           title="Buffet items"
-          items={card.buffetItems.map((i) => ({ name: i.name || "—", qty: i.quantity }))}
+          items={card.buffetItems.map((i) => ({
+            name: i.name || "—",
+            qty: i.quantity,
+          }))}
         />
       ) : null}
 
-      {/* Customer */}
-      <section style={{ display: "grid", gridTemplateColumns: "1fr", gap: 2 }}>
-        <div style={{ fontWeight: 700 }}>
+      {/* Customer info */}
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr",
+          gap: 4,
+          background: "#ffffffb8",
+          border: `1px dashed ${BORDER}`,
+          borderRadius: 10,
+          padding: 8,
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 2 }}>Customer info</div>
+        <Row label="Name">
           {card.customerInfo.firstName} {card.customerInfo.lastName}
-          {card.customerInfo.phone ? <span style={{ opacity: 0.7, fontWeight: 500 }}> · {card.customerInfo.phone}</span> : null}
-        </div>
-        {card.customerInfo.email ? (
-          <div style={{ opacity: 0.8, fontSize: 13 }}>{card.customerInfo.email}</div>
-        ) : null}
-        {card.customerInfo.address && (
-          <div style={{ opacity: 0.8, fontSize: 13 }}>
-            {card.customerInfo.address.street} {card.customerInfo.address.streetNo},{" "}
-            {card.customerInfo.address.plz} {card.customerInfo.address.city}
-          </div>
-        )}
+        </Row>
+        <Row label="Phone Nr.">{card.customerInfo.phone || "—"}</Row>
+        <Row label="Address">
+          {card.customerInfo.address
+            ? `${card.customerInfo.address.street} ${
+                card.customerInfo.address.streetNo ?? ""
+              }, ${card.customerInfo.address.plz ?? ""} ${
+                card.customerInfo.address.city ?? ""
+              }`.trim()
+            : "—"}
+        </Row>
       </section>
 
       {/* Special instructions */}
@@ -260,7 +413,7 @@ function Card(props: {
             background: "#fff8e1",
             border: "1px solid #f7e2a4",
             color: "#7a5d00",
-            padding: "8px 10px",
+            padding: "6px 8px",
             borderRadius: 10,
             fontStyle: "italic",
           }}
@@ -277,10 +430,10 @@ function Card(props: {
             flexWrap: "wrap",
             alignItems: "center",
             gap: 8,
-            padding: 10,
+            padding: 8,
             border: `1px dashed ${BORDER}`,
             borderRadius: 10,
-            background: "#faf9f3",
+            background: "#fff",
           }}
         >
           <div style={{ fontWeight: 700, marginRight: 8 }}>Add minutes</div>
@@ -305,13 +458,21 @@ function Card(props: {
             );
           })}
           <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.8 }}>
-            Base prep: <b>45 min</b> {extra ? `+ ${extra} = ~${45 + extra} min` : ""}
+            Prep base: <b>45 min</b>{" "}
+            {extra ? `+ ${extra} = ~${45 + extra} min` : ""}
           </div>
         </div>
       )}
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+      {/* Actions (right-aligned) */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginTop: 2,
+          justifyContent: "flex-end",
+        }}
+      >
         <button
           onClick={() => onConfirm(card, isOrder && isASAP ? extra : undefined)}
           style={{
@@ -320,10 +481,12 @@ function Card(props: {
             border: "1px solid transparent",
             cursor: "pointer",
             fontWeight: 800,
-            background: AK_DARK,
-            color: "#EFE7CE",
+            background: "#16a34a", // green
+            color: "#fff",
           }}
-          title={isOrder && isASAP ? `Confirm with +${extra} minutes` : "Confirm"}
+          title={
+            isOrder && isASAP ? `Confirm with +${extra} minutes` : "Confirm"
+          }
         >
           Confirm
         </button>
@@ -346,6 +509,28 @@ function Card(props: {
   );
 }
 
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "108px 1fr",
+        gap: 8,
+        fontSize: 13,
+      }}
+    >
+      <div style={{ color: MUTED }}>{label}:</div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
 function ItemsList({
   title,
   items,
@@ -354,12 +539,14 @@ function ItemsList({
   items: { name: string; qty: number }[];
 }) {
   return (
-    <div style={{ marginTop: 2 }}>
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4 }}>
+    <div>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>{title}</div>
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4 }}
+      >
         {items.map((it, i) => (
           <div key={i} style={{ display: "contents" }}>
-            <div>{it.name}</div>
+            <div style={{ fontSize: 13 }}>{it.name}</div>
             <div style={{ textAlign: "right", color: MUTED }}>× {it.qty}</div>
           </div>
         ))}

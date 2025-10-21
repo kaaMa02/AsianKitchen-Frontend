@@ -17,6 +17,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  TableContainer,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import PrintIcon from "@mui/icons-material/Print";
@@ -174,123 +175,134 @@ function OrdersTable({
   onChangeStatus: (id: string, next: OrderStatus) => void | Promise<void>;
 }) {
   return (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell>Created</TableCell>
-          <TableCell>Requested</TableCell>
-          <TableCell>Customer</TableCell>
-          <TableCell>Items</TableCell>
-          <TableCell>Type</TableCell>
-          <TableCell>Total</TableCell>
-          <TableCell>Status</TableCell>
-          <TableCell>Payment</TableCell>
-          <TableCell align="right">Progress / Print</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {rows.length === 0 && (
+    <TableContainer
+      sx={{
+        maxHeight: "calc(100vh - 280px)", // flexible viewport height
+          border: "1px solid #E2D9C2",
+          bgcolor: "#fff",
+      }}
+    >
+      <Table size="small" stickyHeader>
+        <TableHead>
           <TableRow>
-            <TableCell colSpan={9}>No orders</TableCell>
+            <TableCell>Created</TableCell>
+            <TableCell>Requested</TableCell>
+            <TableCell>Customer</TableCell>
+            <TableCell>Items</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>Total</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Payment</TableCell>
+            <TableCell align="right">Progress / Print</TableCell>
           </TableRow>
-        )}
-        {rows.map((o) => {
-          const id = String(o.id);
-          const canPrint =
-            o.paymentStatus === "SUCCEEDED" ||
-            o.paymentStatus === "NOT_REQUIRED" ||
-            o.paymentMethod === "CASH" ||
-            o.paymentMethod === "TWINT" ||
-            o.paymentMethod === "POS_CARD";
-
-          const requestedAt: string | undefined =
-            (o as any).requestedAt || (o as any).timing?.requestedAt;
-          const asap: boolean =
-            Boolean((o as any).timing?.asap) || !requestedAt;
-
-          return (
-            <TableRow key={id}>
-              <TableCell>{formatZurich(String(o.createdAt))}</TableCell>
-              <TableCell>
-                {asap ? "ASAP" : formatZurich(String(requestedAt))}
-              </TableCell>
-              <TableCell>
-                <CellPopover
-                  label={`${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`}
-                >
-                  <div>
-                    <strong>
-                      {o.customerInfo?.firstName} {o.customerInfo?.lastName}
-                    </strong>
-                  </div>
-                  <div>{o.customerInfo?.email}</div>
-                  <div>{o.customerInfo?.phone}</div>
-                  {o.customerInfo?.address && (
-                    <div>
-                      {o.customerInfo.address.street}{" "}
-                      {o.customerInfo.address.streetNo},{" "}
-                      {o.customerInfo.address.plz} {o.customerInfo.address.city}
-                    </div>
-                  )}
-                </CellPopover>
-              </TableCell>
-              <TableCell>
-                <CellPopover label="View items">
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {(o.orderItems ?? []).map((it, i) => (
-                      <li key={i}>
-                        {it.menuItemName ?? "—"} · x {it.quantity}
-                      </li>
-                    ))}
-                  </ul>
-                </CellPopover>
-              </TableCell>
-              <TableCell>{o.orderType}</TableCell>
-              <TableCell>CHF {Number(o.totalPrice || 0).toFixed(2)}</TableCell>
-              <TableCell>
-                <Chip label={o.status} size="small" />
-              </TableCell>
-              <TableCell>
-                <Chip
-                  label={prettyPaymentLabel(o)}
-                  size="small"
-                  color={canPrint ? "success" : "default"}
-                />
-              </TableCell>
-              <TableCell align="right">
-                <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
-                  <Select
-                    value={o.status as string}
-                    onChange={(e: SelectChangeEvent<string>) => {
-                      const next = e.target.value as OrderStatus;
-                      if (next && next !== o.status)
-                        void onChangeStatus(id, next);
-                    }}
-                    disabled={savingId === id}
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <MenuItem key={s} value={s}>
-                        {s}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <IconButton
-                  aria-label="Print receipt"
-                  size="small"
-                  onClick={() => printCustomerOrderReceipt(o)}
-                  disabled={!canPrint}
-                  title={
-                    canPrint ? "Print receipt" : "Print enabled after payment"
-                  }
-                >
-                  <PrintIcon fontSize="small" />
-                </IconButton>
-              </TableCell>
+        </TableHead>
+        <TableBody>
+          {rows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={9}>No orders</TableCell>
             </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+          )}
+          {rows.map((o) => {
+            const id = String(o.id);
+            const canPrint =
+              o.paymentStatus === "SUCCEEDED" ||
+              o.paymentStatus === "NOT_REQUIRED" ||
+              o.paymentMethod === "CASH" ||
+              o.paymentMethod === "TWINT" ||
+              o.paymentMethod === "POS_CARD";
+
+            const requestedAt: string | undefined =
+              (o as any).requestedAt || (o as any).timing?.requestedAt;
+            const asap: boolean =
+              Boolean((o as any).timing?.asap) || !requestedAt;
+
+            return (
+              <TableRow key={id}>
+                <TableCell>{formatZurich(String(o.createdAt))}</TableCell>
+                <TableCell>
+                  {asap ? "ASAP" : formatZurich(String(requestedAt))}
+                </TableCell>
+                <TableCell>
+                  <CellPopover
+                    label={`${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`}
+                  >
+                    <div>
+                      <strong>
+                        {o.customerInfo?.firstName} {o.customerInfo?.lastName}
+                      </strong>
+                    </div>
+                    <div>{o.customerInfo?.email}</div>
+                    <div>{o.customerInfo?.phone}</div>
+                    {o.customerInfo?.address && (
+                      <div>
+                        {o.customerInfo.address.street}{" "}
+                        {o.customerInfo.address.streetNo},{" "}
+                        {o.customerInfo.address.plz}{" "}
+                        {o.customerInfo.address.city}
+                      </div>
+                    )}
+                  </CellPopover>
+                </TableCell>
+                <TableCell>
+                  <CellPopover label="View items">
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {(o.orderItems ?? []).map((it, i) => (
+                        <li key={i}>
+                          {it.menuItemName ?? "—"} · x {it.quantity}
+                        </li>
+                      ))}
+                    </ul>
+                  </CellPopover>
+                </TableCell>
+                <TableCell>{o.orderType}</TableCell>
+                <TableCell>
+                  CHF {Number(o.totalPrice || 0).toFixed(2)}
+                </TableCell>
+                <TableCell>
+                  <Chip label={o.status} size="small" />
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={prettyPaymentLabel(o)}
+                    size="small"
+                    color={canPrint ? "success" : "default"}
+                  />
+                </TableCell>
+                <TableCell align="right">
+                  <FormControl size="small" sx={{ minWidth: 180, mr: 1 }}>
+                    <Select
+                      value={o.status as string}
+                      onChange={(e: SelectChangeEvent<string>) => {
+                        const next = e.target.value as OrderStatus;
+                        if (next && next !== o.status)
+                          void onChangeStatus(id, next);
+                      }}
+                      disabled={savingId === id}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <MenuItem key={s} value={s}>
+                          {s}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <IconButton
+                    aria-label="Print receipt"
+                    size="small"
+                    onClick={() => printCustomerOrderReceipt(o)}
+                    disabled={!canPrint}
+                    title={
+                      canPrint ? "Print receipt" : "Print enabled after payment"
+                    }
+                  >
+                    <PrintIcon fontSize="small" />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }
