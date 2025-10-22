@@ -187,10 +187,10 @@ export default function CartDrawer({ open, onClose }: Props) {
               <Button
                 variant="contained"
                 onClick={goCheckout}
-                disabled={!canCheckout}
+                disabled={true}
                 sx={{ "&:hover": { bgcolor: "#0a241c" } }}
               >
-                Go to checkout
+                Closed today
               </Button>
             </Box>
           </>
