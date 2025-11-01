@@ -11,12 +11,18 @@ export type HoursReason =
 export interface HoursStatusDTO {
   openNow: boolean;
   reason: HoursReason;
-  windowOpensAt?: string;   // ISO string
-  windowClosesAt?: string;  // ISO string
+  windowOpensAt?: string | null;
+  windowClosesAt?: string | null;
   message: string;
 }
 
-export async function getHoursStatus(orderType: "DELIVERY" | "TAKEAWAY"): Promise<HoursStatusDTO> {
-  const res = await http.get(`/api/public/hours/status`, { params: { orderType } });
+/** Optional `at` (ISO) lets you pre-check a scheduled or ASAP+lead time */
+export async function getHoursStatus(
+  orderType: "DELIVERY" | "TAKEAWAY",
+  at?: string
+): Promise<HoursStatusDTO> {
+  const res = await http.get(`/api/public/hours/status`, {
+    params: { orderType, ...(at ? { at } : {}) },
+  });
   return res.data as HoursStatusDTO;
 }

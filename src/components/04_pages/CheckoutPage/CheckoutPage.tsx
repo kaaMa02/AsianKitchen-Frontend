@@ -40,14 +40,17 @@ import {
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
 import { readCartTiming } from "../../../utils/cartTiming";
+import { getHoursStatus } from "../../../services/hours"; // ⬅️ NEW
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
 const CARD_BG = "#F4F7FB";
 
+// keep in sync with backend app.order.min-lead-minutes
+const SERVER_MIN_LEAD_MINUTES = 45;
+
 type Errors = Record<string, string>;
 
-/** Local strict types for the form (no optionals anywhere) */
 type CheckoutAddress = {
   street: string;
   streetNo: string;
@@ -190,7 +193,6 @@ export default function CheckoutPage() {
   const [error, setError] = React.useState<string>();
   const [preparing, setPreparing] = React.useState(false);
 
-  // ✅ Local strict state (no CustomerInfoDTO here)
   const [customer, setCustomer] =
     React.useState<CheckoutCustomer>(emptyCustomer);
 
@@ -295,16 +297,35 @@ export default function CheckoutPage() {
         return;
       }
 
+      // ⬇️ NEW: Pre-check hours for the TARGET time
+      const timing = readCartTiming();
+      const targetAtIso =
+        timing.asap === true
+          ? new Date(
+              Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000
+            ).toISOString()
+          : timing.scheduledAt || new Date().toISOString();
+
+      const hours = await getHoursStatus(orderType, targetAtIso);
+      if (!hours.openNow) {
+        setError(
+          hours.windowOpensAt
+            ? `${hours.message} Next open: ${new Date(
+                hours.windowOpensAt
+              ).toLocaleString()}`
+            : hours.message || "We’re closed."
+        );
+        return;
+      }
+      // ⬆️ END pre-check
+
       setPreparing(true);
       await ensureCsrf();
-
-      // timing from cart storage
-      const timing = readCartTiming();
 
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
           userId: undefined,
-          customerInfo: customer, // structurally compatible with backend DTO
+          customerInfo: customer as any,
           orderType,
           specialInstructions: undefined,
           items: cartLines.map((l) => ({
@@ -328,7 +349,7 @@ export default function CheckoutPage() {
       } else {
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
-          customerInfo: customer, // structurally compatible
+          customerInfo: customer as any,
           orderType,
           specialInstructions: undefined,
           items: cartLines.map((l) => ({

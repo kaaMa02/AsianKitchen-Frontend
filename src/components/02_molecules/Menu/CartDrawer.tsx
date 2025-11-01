@@ -16,10 +16,14 @@ import { useCart } from "../../../contexts/CartContext";
 import { OrderType } from "../../../types/api-types";
 import { getActiveDiscount } from "../../../services/discounts";
 import CartTimingWidget from "./CartTimingWidget";
+import { readCartTiming } from "../../../utils/cartTiming"; // ⬅️ NEW
+import { getHoursStatus } from "../../../services/hours"; // ⬅️ NEW
 
 type Props = { open: boolean; onClose: () => void };
 
 const MIN_DELIVERY_TOTAL = 30;
+// keep in sync with backend app.order.min-lead-minutes
+const SERVER_MIN_LEAD_MINUTES = 45;
 
 export default function CartDrawer({ open, onClose }: Props) {
   const nav = useNavigate();
@@ -46,11 +50,50 @@ export default function CartDrawer({ open, onClose }: Props) {
   );
   const percent = hasBuffet ? discount.buffet : discount.menu;
 
-  const canCheckout =
+  const canCheckoutSubtotal =
     state.lines.length > 0 &&
-    (state.orderType === OrderType.DELIVERY
-      ? total >= MIN_DELIVERY_TOTAL
-      : true);
+    (state.orderType === OrderType.DELIVERY ? total >= MIN_DELIVERY_TOTAL : true);
+
+  // ⬇️ NEW: pre-check for ASAP hours
+  const [hoursOk, setHoursOk] = useState<boolean | null>(null);
+  const [hoursMsg, setHoursMsg] = useState<string>("");
+
+  const refreshHours = async () => {
+    try {
+      const timing = readCartTiming();
+      // Only block proactively if ASAP; for scheduled we’ll allow and user can pick a valid time in checkout
+      if (timing.asap === true) {
+        const targetAtIso = new Date(
+          Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000
+        ).toISOString();
+        const s = await getHoursStatus(state.orderType as OrderType, targetAtIso);
+        setHoursOk(s.openNow);
+        setHoursMsg(
+          s.openNow
+            ? ""
+            : s.windowOpensAt
+            ? `${s.message} Next open: ${new Date(s.windowOpensAt).toLocaleString()}`
+            : s.message || "We’re closed."
+        );
+      } else {
+        setHoursOk(true); // scheduled — don’t block here; checkout page will pre-check precisely
+        setHoursMsg("");
+      }
+    } catch {
+      setHoursOk(null);
+      setHoursMsg("");
+    }
+  };
+
+  useEffect(() => {
+    if (open) refreshHours();
+    // also refresh when order type changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, state.orderType]);
+
+  const canCheckout =
+    canCheckoutSubtotal &&
+    (hoursOk !== false); // if ASAP and closed, disable
 
   const handleOrderType = (_: unknown, val: OrderType | null) => {
     if (val) setOrderType(val);
@@ -146,11 +189,7 @@ export default function CartDrawer({ open, onClose }: Props) {
             </Box>
 
             {percent > 0 && (
-              <Chip
-                size="small"
-                sx={{ mt: 1 }}
-                label={`${percent}% off active`}
-              />
+              <Chip size="small" sx={{ mt: 1 }} label={`${percent}% off active`} />
             )}
 
             <Box sx={{ mt: 1.5 }}>
@@ -169,16 +208,23 @@ export default function CartDrawer({ open, onClose }: Props) {
               </ToggleButtonGroup>
             </Box>
 
-            {state.orderType === OrderType.DELIVERY &&
-              total < MIN_DELIVERY_TOTAL && (
-                <Alert sx={{ mt: 1.5 }} severity="info" variant="outlined">
-                  Minimum delivery order is CHF {MIN_DELIVERY_TOTAL.toFixed(2)}.
-                </Alert>
-              )}
+            {state.orderType === OrderType.DELIVERY && total < MIN_DELIVERY_TOTAL && (
+              <Alert sx={{ mt: 1.5 }} severity="info" variant="outlined">
+                Minimum delivery order is CHF {MIN_DELIVERY_TOTAL.toFixed(2)}.
+              </Alert>
+            )}
 
+            {/* Timing selector (writes to localStorage); we re-read on open/type change */}
             <Box sx={{ mt: 1.5 }}>
-              <CartTimingWidget defaultMinPrepMinutes={45} />+{" "}
+              <CartTimingWidget defaultMinPrepMinutes={SERVER_MIN_LEAD_MINUTES} />
             </Box>
+
+            {/* Hours warning if ASAP & closed */}
+            {hoursOk === false && (
+              <Alert sx={{ mt: 1.5 }} severity="warning" variant="outlined">
+                {hoursMsg || "We’re closed for ASAP orders right now."}
+              </Alert>
+            )}
 
             <Box sx={{ display: "grid", gap: 1.25, mt: 1.5 }}>
               <Button onClick={clear} variant="outlined">
