@@ -1,67 +1,72 @@
 // src/components/cart/CartTimingWidget.tsx
 import * as React from "react";
+import { CartTiming, localInputToWallNoZ, readCartTiming, toLocalInputValue, writeCartTiming } from "../../../utils/cartTiming";
 
-type Timing = { asap: boolean; scheduledAt: string | null };
-const KEY = "ak.cartTiming";
-
-function load(): Timing {
-  try { return JSON.parse(localStorage.getItem(KEY) || "") as Timing; }
-  catch { return { asap: true, scheduledAt: null }; }
-}
-function save(t: Timing) { localStorage.setItem(KEY, JSON.stringify(t)); }
-
-// Convert local 'YYYY-MM-DDTHH:mm' -> UTC wall string 'YYYY-MM-DDTHH:mm:ss' (no Z)
-function toUtcLocalDateTimeString(localLike: string): string {
-  if (!localLike) return "";
-  const d = new Date(localLike);
-  return d.toISOString().replace("Z","").slice(0,19);
-}
-
-// Suggest minimum datetime (now + 45m)
-function minLocalDateTime(mins: number): string {
-  const d = new Date(Date.now() + mins * 60000);
-  const pad = (n:number)=>String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+type Props = {
+  /** Server min prep, used for the default/min time suggestion */
+  defaultMinPrepMinutes?: number;
+  /** Optional callback if the parent also wants to react */
+  onTimingChange?: (payload: { asap: boolean; scheduledAt?: string }) => void;
+};
 
 export default function CartTimingWidget({
   defaultMinPrepMinutes = 45,
   onTimingChange,
-}: {
-  defaultMinPrepMinutes?: number;
-  onTimingChange?: (payload: { asap: boolean; scheduledAt?: string }) => void;
-}) {
-  const [timing, setTiming] = React.useState<Timing>(() => load());
+}: Props) {
+  const [timing, setTiming] = React.useState<CartTiming>(() => readCartTiming());
 
-  React.useEffect(() => {
-    save(timing);
-    const payload = timing.asap
-      ? { asap: true }
-      : { asap: false, scheduledAt: toUtcLocalDateTimeString(timing.scheduledAt || "") };
-    onTimingChange?.(payload);
-  }, [timing, onTimingChange]);
+  // Min selectable: now + prep (rounded to minute, no seconds)
+  const minDate = React.useMemo(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + defaultMinPrepMinutes);
+    d.setSeconds(0, 0);
+    return d;
+  }, [defaultMinPrepMinutes]);
 
-  const minVal = minLocalDateTime(defaultMinPrepMinutes);
+  const minLocal = toLocalInputValue(minDate);
+
+  // Commit -> save LS, fire event, optional callback
+  const commit = (next: CartTiming) => {
+    setTiming(next);
+    writeCartTiming(next);
+    // Keep the external payload shape you've been using (no Z)
+    onTimingChange?.(next.asap ? { asap: true } : { asap: false, scheduledAt: next.scheduledAt || undefined });
+  };
+
+  const selectASAP = () => {
+    commit({ asap: true, scheduledAt: null });
+  };
+
+  const selectSchedule = () => {
+    // Initial pick defaults to minLocal
+    const wall = localInputToWallNoZ(minLocal);
+    commit({ asap: false, scheduledAt: wall });
+  };
+
+  const changeSchedule = (localValue: string) => {
+    const wall = localInputToWallNoZ(localValue);
+    commit({ asap: false, scheduledAt: wall || null });
+  };
+
+  // Derive the input value: if we have a saved wall string, show it as 'datetime-local'
+  const inputValue = React.useMemo(() => {
+    if (!timing.scheduledAt) return minLocal;
+    const d = new Date(timing.scheduledAt); // wall string parses as local
+    if (isNaN(d.getTime())) return minLocal;
+    return toLocalInputValue(d);
+  }, [timing.scheduledAt, minLocal]);
 
   return (
     <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 12 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>When do you want it?</div>
 
       <label style={{ display: "block", marginBottom: 6 }}>
-        <input
-          type="radio"
-          checked={timing.asap}
-          onChange={() => setTiming({ asap: true, scheduledAt: null })}
-        />{" "}
+        <input type="radio" checked={timing.asap} onChange={selectASAP} />{" "}
         ASAP (about {defaultMinPrepMinutes} min)
       </label>
 
       <label style={{ display: "block", marginBottom: 8 }}>
-        <input
-          type="radio"
-          checked={!timing.asap}
-          onChange={() => setTiming({ asap: false, scheduledAt: minVal })}
-        />{" "}
+        <input type="radio" checked={!timing.asap} onChange={selectSchedule} />{" "}
         Schedule a time
       </label>
 
@@ -69,10 +74,10 @@ export default function CartTimingWidget({
         <div>
           <input
             type="datetime-local"
-            value={timing.scheduledAt || ""}
-            onChange={(e) => setTiming({ asap: false, scheduledAt: e.target.value })}
-            min={minVal}
+            value={inputValue}
+            min={minLocal}
             step={900}
+            onChange={(e) => changeSchedule(e.target.value)}
             style={{ padding: "6px 8px" }}
           />
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>

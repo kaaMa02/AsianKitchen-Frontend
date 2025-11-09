@@ -1,3 +1,4 @@
+// src/components/cart/CartDrawer.tsx
 import Drawer from "@mui/material/Drawer";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -11,13 +12,12 @@ import Alert from "@mui/material/Alert";
 import Chip from "@mui/material/Chip";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
 import { useCart } from "../../../contexts/CartContext";
-import { OrderType } from "../../../types/api-types";
 import { getActiveDiscount } from "../../../services/discounts";
+import { getHoursStatus } from "../../../services/hours";
+import { OrderType } from "../../../types/api-types";
+import { readCartTiming } from "../../../utils/cartTiming";
 import CartTimingWidget from "./CartTimingWidget";
-import { readCartTiming } from "../../../utils/cartTiming"; // ⬅️ NEW
-import { getHoursStatus } from "../../../services/hours"; // ⬅️ NEW
 
 type Props = { open: boolean; onClose: () => void };
 
@@ -28,44 +28,31 @@ const SERVER_MIN_LEAD_MINUTES = 45;
 export default function CartDrawer({ open, onClose }: Props) {
   const nav = useNavigate();
   const { state, inc, dec, remove, clear, total, setOrderType } = useCart();
-  const [discount, setDiscount] = useState<{ menu: number; buffet: number }>({
-    menu: 0,
-    buffet: 0,
-  });
+  const [discount, setDiscount] = useState<{ menu: number; buffet: number }>({ menu: 0, buffet: 0 });
 
   useEffect(() => {
     getActiveDiscount()
-      .then((d) =>
-        setDiscount({
-          menu: Number(d.percentMenu) || 0,
-          buffet: Number(d.percentBuffet) || 0,
-        })
-      )
+      .then((d) => setDiscount({ menu: Number(d.percentMenu) || 0, buffet: Number(d.percentBuffet) || 0 }))
       .catch(() => setDiscount({ menu: 0, buffet: 0 }));
   }, []);
 
-  const hasBuffet = useMemo(
-    () => state.lines.some((l) => l.kind === "BUFFET"),
-    [state.lines]
-  );
+  const hasBuffet = useMemo(() => state.lines.some((l) => l.kind === "BUFFET"), [state.lines]);
   const percent = hasBuffet ? discount.buffet : discount.menu;
 
   const canCheckoutSubtotal =
     state.lines.length > 0 &&
     (state.orderType === OrderType.DELIVERY ? total >= MIN_DELIVERY_TOTAL : true);
 
-  // ⬇️ NEW: pre-check for ASAP hours
+  // Hours gate for ASAP
   const [hoursOk, setHoursOk] = useState<boolean | null>(null);
   const [hoursMsg, setHoursMsg] = useState<string>("");
 
   const refreshHours = async () => {
     try {
       const timing = readCartTiming();
-      // Only block proactively if ASAP; for scheduled we’ll allow and user can pick a valid time in checkout
+      // Only proactively block ASAP; scheduled is allowed here (checkout validates precisely)
       if (timing.asap === true) {
-        const targetAtIso = new Date(
-          Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000
-        ).toISOString();
+        const targetAtIso = new Date(Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000).toISOString();
         const s = await getHoursStatus(state.orderType as OrderType, targetAtIso);
         setHoursOk(s.openNow);
         setHoursMsg(
@@ -76,7 +63,7 @@ export default function CartDrawer({ open, onClose }: Props) {
             : s.message || "We’re closed."
         );
       } else {
-        setHoursOk(true); // scheduled — don’t block here; checkout page will pre-check precisely
+        setHoursOk(true);
         setHoursMsg("");
       }
     } catch {
@@ -85,15 +72,20 @@ export default function CartDrawer({ open, onClose }: Props) {
     }
   };
 
+  // Existing triggers: on open and when order type changes
   useEffect(() => {
     if (open) refreshHours();
-    // also refresh when order type changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, state.orderType]);
 
-  const canCheckout =
-    canCheckoutSubtotal &&
-    (hoursOk !== false); // if ASAP and closed, disable
+  // 🔥 NEW: react immediately when the user toggles ASAP/Schedule/time
+  useEffect(() => {
+    const handler = () => { void refreshHours(); };
+    window.addEventListener("ak:cartTiming", handler);
+    return () => window.removeEventListener("ak:cartTiming", handler);
+  }, []); // mount once
+
+  const canCheckout = canCheckoutSubtotal && hoursOk !== false;
 
   const handleOrderType = (_: unknown, val: OrderType | null) => {
     if (val) setOrderType(val);
@@ -108,10 +100,7 @@ export default function CartDrawer({ open, onClose }: Props) {
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: { xs: 320, md: 380 }, p: 2 }}>
         <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-          <Typography
-            variant="h6"
-            sx={{ fontWeight: 800, color: "#0B2D24", flex: 1 }}
-          >
+          <Typography variant="h6" sx={{ fontWeight: 800, color: "#0B2D24", flex: 1 }}>
             Your Cart
           </Typography>
           <IconButton onClick={onClose} size="small" aria-label="Close cart">
@@ -128,45 +117,18 @@ export default function CartDrawer({ open, onClose }: Props) {
               {state.lines.map((l) => (
                 <Box
                   key={l.key}
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 1,
-                    alignItems: "center",
-                  }}
+                  sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 1, alignItems: "center" }}
                 >
                   <Box>
-                    <Typography sx={{ fontWeight: 700, color: "#0B2D24" }}>
-                      {l.name}
-                    </Typography>
+                    <Typography sx={{ fontWeight: 700, color: "#0B2D24" }}>{l.name}</Typography>
                     <Typography sx={{ color: "#0B2D24", opacity: 0.85 }}>
                       {l.priceChf} × {l.quantity}
                     </Typography>
                   </Box>
                   <Box sx={{ display: "flex", gap: 1 }}>
-                    <Button
-                      onClick={() => dec(l.key)}
-                      size="small"
-                      variant="outlined"
-                      aria-label="Decrease"
-                    >
-                      -
-                    </Button>
-                    <Button
-                      onClick={() => inc(l.key)}
-                      size="small"
-                      variant="outlined"
-                      aria-label="Increase"
-                    >
-                      +
-                    </Button>
-                    <Button
-                      onClick={() => remove(l.key)}
-                      size="small"
-                      color="error"
-                      variant="text"
-                      aria-label="Remove"
-                    >
+                    <Button onClick={() => dec(l.key)} size="small" variant="outlined" aria-label="Decrease">-</Button>
+                    <Button onClick={() => inc(l.key)} size="small" variant="outlined" aria-label="Increase">+</Button>
+                    <Button onClick={() => remove(l.key)} size="small" color="error" variant="text" aria-label="Remove">
                       Remove
                     </Button>
                   </Box>
@@ -175,27 +137,15 @@ export default function CartDrawer({ open, onClose }: Props) {
             </Box>
 
             <Divider sx={{ my: 1.5 }} />
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                color: "#0B2D24",
-              }}
-            >
+            <Box sx={{ display: "flex", justifyContent: "space-between", color: "#0B2D24" }}>
               <Typography sx={{ fontWeight: 800 }}>Subtotal</Typography>
-              <Typography sx={{ fontWeight: 800 }}>
-                CHF {total.toFixed(2)}
-              </Typography>
+              <Typography sx={{ fontWeight: 800 }}>CHF {total.toFixed(2)}</Typography>
             </Box>
 
-            {percent > 0 && (
-              <Chip size="small" sx={{ mt: 1 }} label={`${percent}% off active`} />
-            )}
+            {percent > 0 && <Chip size="small" sx={{ mt: 1 }} label={`${percent}% off active`} />}
 
             <Box sx={{ mt: 1.5 }}>
-              <Typography sx={{ color: "#0B2D24", mb: 0.75, fontWeight: 700 }}>
-                Order type
-              </Typography>
+              <Typography sx={{ color: "#0B2D24", mb: 0.75, fontWeight: 700 }}>Order type</Typography>
               <ToggleButtonGroup
                 value={state.orderType as OrderType}
                 exclusive
@@ -214,7 +164,7 @@ export default function CartDrawer({ open, onClose }: Props) {
               </Alert>
             )}
 
-            {/* Timing selector (writes to localStorage); we re-read on open/type change */}
+            {/* Timing selector (writes to localStorage and notifies the drawer immediately) */}
             <Box sx={{ mt: 1.5 }}>
               <CartTimingWidget defaultMinPrepMinutes={SERVER_MIN_LEAD_MINUTES} />
             </Box>
@@ -227,9 +177,7 @@ export default function CartDrawer({ open, onClose }: Props) {
             )}
 
             <Box sx={{ display: "grid", gap: 1.25, mt: 1.5 }}>
-              <Button onClick={clear} variant="outlined">
-                Clear cart
-              </Button>
+              <Button onClick={clear} variant="outlined">Clear cart</Button>
               <Button
                 variant="contained"
                 onClick={goCheckout}
