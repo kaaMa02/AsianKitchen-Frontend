@@ -1,11 +1,15 @@
 // src/components/cart/CartTimingWidget.tsx
 import * as React from "react";
-import { CartTiming, localInputToWallNoZ, readCartTiming, toLocalInputValue, writeCartTiming } from "../../../utils/cartTiming";
+import {
+  CartTiming,
+  readCartTiming,
+  writeCartTiming,
+  toLocalInputValue,
+  localInputToWallNoZ,
+} from "../../../utils/cartTiming";
 
 type Props = {
-  /** Server min prep, used for the default/min time suggestion */
   defaultMinPrepMinutes?: number;
-  /** Optional callback if the parent also wants to react */
   onTimingChange?: (payload: { asap: boolean; scheduledAt?: string }) => void;
 };
 
@@ -15,7 +19,7 @@ export default function CartTimingWidget({
 }: Props) {
   const [timing, setTiming] = React.useState<CartTiming>(() => readCartTiming());
 
-  // Min selectable: now + prep (rounded to minute, no seconds)
+  // now + prep, rounded to minute
   const minDate = React.useMemo(() => {
     const d = new Date();
     d.setMinutes(d.getMinutes() + defaultMinPrepMinutes);
@@ -25,20 +29,15 @@ export default function CartTimingWidget({
 
   const minLocal = toLocalInputValue(minDate);
 
-  // Commit -> save LS, fire event, optional callback
   const commit = (next: CartTiming) => {
     setTiming(next);
-    writeCartTiming(next);
-    // Keep the external payload shape you've been using (no Z)
+    writeCartTiming(next); // 🔔 notifies CartDrawer
     onTimingChange?.(next.asap ? { asap: true } : { asap: false, scheduledAt: next.scheduledAt || undefined });
   };
 
-  const selectASAP = () => {
-    commit({ asap: true, scheduledAt: null });
-  };
+  const selectASAP = () => commit({ asap: true, scheduledAt: null });
 
   const selectSchedule = () => {
-    // Initial pick defaults to minLocal
     const wall = localInputToWallNoZ(minLocal);
     commit({ asap: false, scheduledAt: wall });
   };
@@ -48,10 +47,10 @@ export default function CartTimingWidget({
     commit({ asap: false, scheduledAt: wall || null });
   };
 
-  // Derive the input value: if we have a saved wall string, show it as 'datetime-local'
+  // What to show inside the datetime-local input
   const inputValue = React.useMemo(() => {
     if (!timing.scheduledAt) return minLocal;
-    const d = new Date(timing.scheduledAt); // wall string parses as local
+    const d = new Date(timing.scheduledAt); // wall string parses as local in browsers
     if (isNaN(d.getTime())) return minLocal;
     return toLocalInputValue(d);
   }, [timing.scheduledAt, minLocal]);

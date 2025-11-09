@@ -12,17 +12,17 @@ import Alert from "@mui/material/Alert";
 import Chip from "@mui/material/Chip";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import { useCart } from "../../../contexts/CartContext";
-import { getActiveDiscount } from "../../../services/discounts";
-import { getHoursStatus } from "../../../services/hours";
 import { OrderType } from "../../../types/api-types";
-import { readCartTiming } from "../../../utils/cartTiming";
+import { getActiveDiscount } from "../../../services/discounts";
 import CartTimingWidget from "./CartTimingWidget";
+import { readCartTiming } from "../../../utils/cartTiming";
+import { getHoursStatus } from "../../../services/hours";
 
 type Props = { open: boolean; onClose: () => void };
 
 const MIN_DELIVERY_TOTAL = 30;
-// keep in sync with backend app.order.min-lead-minutes
 const SERVER_MIN_LEAD_MINUTES = 45;
 
 export default function CartDrawer({ open, onClose }: Props) {
@@ -43,47 +43,55 @@ export default function CartDrawer({ open, onClose }: Props) {
     state.lines.length > 0 &&
     (state.orderType === OrderType.DELIVERY ? total >= MIN_DELIVERY_TOTAL : true);
 
-  // Hours gate for ASAP
+  // live status for ASAP / scheduled target time
   const [hoursOk, setHoursOk] = useState<boolean | null>(null);
   const [hoursMsg, setHoursMsg] = useState<string>("");
 
   const refreshHours = async () => {
     try {
       const timing = readCartTiming();
-      // Only proactively block ASAP; scheduled is allowed here (checkout validates precisely)
-      if (timing.asap === true) {
-        const targetAtIso = new Date(Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000).toISOString();
-        const s = await getHoursStatus(state.orderType as OrderType, targetAtIso);
-        setHoursOk(s.openNow);
-        setHoursMsg(
-          s.openNow
-            ? ""
-            : s.windowOpensAt
-            ? `${s.message} Next open: ${new Date(s.windowOpensAt).toLocaleString()}`
-            : s.message || "We’re closed."
-        );
-      } else {
-        setHoursOk(true);
+
+      // Determine the target instant we want to validate
+      const targetAtIso =
+        timing.asap === true
+          ? new Date(Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000).toISOString()
+          : timing.scheduledAt
+          ? new Date(timing.scheduledAt).toISOString()
+          : null;
+
+      if (!targetAtIso) {
+        setHoursOk(null);
         setHoursMsg("");
+        return;
       }
+
+      const s = await getHoursStatus(state.orderType as OrderType, targetAtIso);
+      setHoursOk(s.openNow);
+      setHoursMsg(
+        s.openNow
+          ? ""
+          : s.windowOpensAt
+          ? `${s.message} Next open: ${new Date(s.windowOpensAt).toLocaleString()}`
+          : s.message || "We’re closed."
+      );
     } catch {
       setHoursOk(null);
       setHoursMsg("");
     }
   };
 
-  // Existing triggers: on open and when order type changes
+  // On open and when order type changes
   useEffect(() => {
     if (open) refreshHours();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, state.orderType]);
 
-  // 🔥 NEW: react immediately when the user toggles ASAP/Schedule/time
+  // 🔔 React immediately to ASAP/Schedule/time changes (no page refresh)
   useEffect(() => {
     const handler = () => { void refreshHours(); };
     window.addEventListener("ak:cartTiming", handler);
     return () => window.removeEventListener("ak:cartTiming", handler);
-  }, []); // mount once
+  }, []);
 
   const canCheckout = canCheckoutSubtotal && hoursOk !== false;
 
@@ -164,15 +172,15 @@ export default function CartDrawer({ open, onClose }: Props) {
               </Alert>
             )}
 
-            {/* Timing selector (writes to localStorage and notifies the drawer immediately) */}
+            {/* Timing selector (writes to localStorage and notifies this drawer) */}
             <Box sx={{ mt: 1.5 }}>
               <CartTimingWidget defaultMinPrepMinutes={SERVER_MIN_LEAD_MINUTES} />
             </Box>
 
-            {/* Hours warning if ASAP & closed */}
+            {/* Hours warning (applies to both ASAP target and the selected scheduled time) */}
             {hoursOk === false && (
               <Alert sx={{ mt: 1.5 }} severity="warning" variant="outlined">
-                {hoursMsg || "We’re closed for ASAP orders right now."}
+                {hoursMsg || "Selected time is currently unavailable."}
               </Alert>
             )}
 
