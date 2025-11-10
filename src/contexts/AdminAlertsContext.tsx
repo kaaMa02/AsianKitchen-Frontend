@@ -6,41 +6,131 @@ import {
   AlertKind,
 } from "../services/alerts";
 
-function useBell() {
+/** ===== Audio hook that is robust against autoplay and “missed” first ring ===== */
+type BellOptions = {
+  src?: string;
+  intervalMs?: number; // re-ring cadence
+  volume?: number;
+};
+
+function useBell(opts: BellOptions = {}) {
+  const {
+    src = "/notify.mp3",
+    intervalMs = 60_000, // ring every 60s until stopped
+    volume = 1,
+  } = opts;
+
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
-  const [armed, setArmed] = React.useState(false);
+  const [armed, setArmed] = React.useState<boolean>(() => {
+    // Persist optional preference if you add a toggle later
+    return localStorage.getItem("orderSoundEnabled") === "1";
+  });
+  const [isRinging, setIsRinging] = React.useState(false);
+  const timerRef = React.useRef<number | null>(null);
+  const pendingRingRef = React.useRef(false); // if increase happens before armed, ring once we arm
 
   React.useEffect(() => {
-    audioRef.current = new Audio("/notify.mp3");
-    audioRef.current.preload = "auto";
-  }, []);
+    const a = new Audio(src);
+    a.preload = "auto";
+    a.loop = false;
+    a.volume = volume;
+    audioRef.current = a;
+  }, [src, volume]);
 
+  // One-time unlock on first gesture. We actually play muted to satisfy Safari/iOS.
   React.useEffect(() => {
-    const unlock = () => {
-      void audioRef.current?.play().catch(() => {});
-      audioRef.current?.pause();
-      if (audioRef.current) audioRef.current.currentTime = 0;
-      setArmed(true);
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
+    if (armed) return;
+
+    const unlock = async () => {
+      try {
+        const a = audioRef.current;
+        if (!a) return;
+        a.muted = true;
+        await a.play(); // should succeed due to gesture
+        a.pause();
+        a.currentTime = 0;
+        a.muted = false;
+        setArmed(true);
+        localStorage.setItem("orderSoundEnabled", "1");
+
+        // If we had an increase before getting armed, start ringing now.
+        if (pendingRingRef.current) {
+          startRinging();
+        }
+      } catch {
+        // If this fails, the user probably blocked sound at the site/OS level.
+        // We keep armed=false so we can try again on the next gesture.
+      } finally {
+        window.removeEventListener("pointerdown", unlock);
+        window.removeEventListener("keydown", unlock);
+      }
     };
+
     window.addEventListener("pointerdown", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
+  }, [armed]);
+
+  const ringOnce = React.useCallback(async () => {
+    const a = audioRef.current;
+    if (!a) return;
+    try {
+      // Reuse the SAME unlocked element
+      a.pause();
+      a.currentTime = 0;
+      await a.play();
+    } catch {
+      // Swallow; if it fails (site muted), we keep logic consistent.
+    }
   }, []);
 
-  const play = React.useCallback(() => {
-    if (!audioRef.current) return;
-    const a = audioRef.current.cloneNode(true) as HTMLAudioElement;
-    void a.play().catch(() => {});
+  const startRinging = React.useCallback(() => {
+    if (!armed) {
+      // queue the ring to happen once armed
+      pendingRingRef.current = true;
+      return;
+    }
+    pendingRingRef.current = false;
+
+    // Clear any previous cadence
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsRinging(true);
+    void ringOnce();
+
+    // Ring again every interval
+    timerRef.current = window.setInterval(() => {
+      void ringOnce();
+    }, intervalMs);
+  }, [armed, intervalMs, ringOnce]);
+
+  const stopRinging = React.useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsRinging(false);
   }, []);
 
-  return { play, armed };
+  // Always stop on unmount
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
+  return { armed, isRinging, startRinging, stopRinging };
 }
 
+/** ===== Context ===== */
 type Ctx = {
   alerts: AdminAlerts;
   total: number;
@@ -61,36 +151,56 @@ const ZERO: AdminAlerts = {
   ordersNew: 0,
   buffetOrdersNew: 0,
 };
+
 type ProviderProps = Readonly<{ children: React.ReactNode }>;
 
 export function AdminAlertsProvider({ children }: ProviderProps) {
   const [alerts, setAlerts] = React.useState<AdminAlerts>(ZERO);
   const prevRef = React.useRef<AdminAlerts>(ZERO);
-  const { play, armed } = useBell();
+
+  // Use the improved bell with repeat cadence
+  const { startRinging, stopRinging } = useBell({
+    src: "/notify.mp3", // ensure this exists under /public
+    intervalMs: 60_000,
+    volume: 1,
+  });
 
   const refresh = React.useCallback(async () => {
-    const a = await getAdminAlerts(); // returns *unseen* counts from backend
-    // ring if any bucket increased vs previous snapshot
+    const a = await getAdminAlerts(); // server returns *unseen* counts
+
+    // Detect any increase vs previous snapshot
     const p = prevRef.current;
     const inc =
       a.reservationsRequested > p.reservationsRequested ||
       a.ordersNew > p.ordersNew ||
       a.buffetOrdersNew > p.buffetOrdersNew;
 
-    if (inc && armed) play();
+    if (inc) {
+      // Start (or keep) ringing until seen/cleared
+      startRinging();
+    }
+
+    // If everything is cleared/zero, stop ringing
+    const sum = a.reservationsRequested + a.ordersNew + a.buffetOrdersNew;
+    if (sum === 0) {
+      stopRinging();
+    }
+
     prevRef.current = a;
     setAlerts(a);
-  }, [armed, play]);
+  }, [startRinging, stopRinging]);
 
   React.useEffect(() => {
     let stop = false;
     const loop = async () => {
       try {
         await refresh();
-      } catch {}
-      if (!stop) setTimeout(loop, 15000);
+      } catch {
+        // ignore transient errors
+      }
+      if (!stop) window.setTimeout(loop, 15_000);
     };
-    loop();
+    void loop();
     return () => {
       stop = true;
     };
@@ -99,7 +209,7 @@ export function AdminAlertsProvider({ children }: ProviderProps) {
   const markSeen = React.useCallback(
     async (kinds: AlertKind | AlertKind[]) => {
       const ks = Array.isArray(kinds) ? kinds : [kinds];
-      await markAlertsSeen(ks); // server zeroes unseen for those buckets
+      await markAlertsSeen(ks); // server zeros unseen for those buckets
 
       // optimistic local zero for those buckets
       setAlerts((a) => ({
@@ -119,12 +229,22 @@ export function AdminAlertsProvider({ children }: ProviderProps) {
           : prevRef.current.buffetOrdersNew,
       };
 
-      // pull once more to align with server
-      setTimeout(() => {
+      // If *all* buckets are zero after marking seen, stop ringing now
+      const nxt =
+        (ks.includes("reservations") ? 0 : prevRef.current.reservationsRequested) +
+        (ks.includes("orders") ? 0 : prevRef.current.ordersNew) +
+        (ks.includes("buffet") ? 0 : prevRef.current.buffetOrdersNew);
+
+      if (nxt === 0) {
+        stopRinging();
+      }
+
+      // small sync pull to align with server truth
+      window.setTimeout(() => {
         void refresh();
       }, 800);
     },
-    [refresh]
+    [refresh, stopRinging]
   );
 
   const total =
