@@ -223,19 +223,21 @@ export default function CheckoutPage() {
         if (!cancelled) setEligibility({ deliverable: true });
         return;
       }
-      const plz = (customer.address.plz || "").trim();
+      // ✅ digits-only for backend, avoids false negatives
+      const raw = customer.address.plz || "";
+      const digits = raw.replace(/\D/g, "");
 
       // Don’t show red error before the user enters a plausible PLZ.
-      if (!plz || plz.length < 4) {
+      if (digits.length !== 4) {
         if (!cancelled) setEligibility(null);
         return;
       }
 
       try {
-        const res = await checkDeliveryEligibility("DELIVERY", plz);
+        const res = await checkDeliveryEligibility("DELIVERY", digits);
         if (!cancelled)
           setEligibility({
-            deliverable: res.deliverable,
+            deliverable: !!res.deliverable,
             message: res.message || undefined,
           });
       } catch {
@@ -605,7 +607,13 @@ export default function CheckoutPage() {
                 onChange={handleInput("address.plz")}
                 error={!!fieldErrors["address.plz"]}
                 helperText={fieldErrors["address.plz"]}
+                inputProps={{
+                  inputMode: "numeric",
+                  pattern: "[0-9]*",
+                  maxLength: 8,
+                }}
               />
+
               <TextField
                 label="City"
                 fullWidth
