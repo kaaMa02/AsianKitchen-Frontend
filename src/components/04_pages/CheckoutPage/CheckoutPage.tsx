@@ -17,20 +17,21 @@ import {
   Chip,
 } from "@mui/material";
 import TextField from "@mui/material/TextField";
+import { useNavigate } from "react-router-dom";
+
+import { useCart } from "../../../contexts/CartContext";
+import {
+  OrderType,
+  PaymentMethod as PaymentMethodType,
+  BuffetOrderWriteDTO,
+  CustomerOrderWriteDTO,
+} from "../../../types/api-types";
+import { PaymentMethod } from "../../../types/api-types";
 
 import {
   getActiveDiscount,
   type ActiveDiscountDTO,
 } from "../../../services/discounts";
-import { useCart } from "../../../contexts/CartContext";
-import { useNavigate } from "react-router-dom";
-import type {
-  OrderType,
-  BuffetOrderWriteDTO,
-  CustomerOrderWriteDTO,
-  PaymentMethod as PaymentMethodType,
-} from "../../../types/api-types";
-import { PaymentMethod } from "../../../types/api-types";
 import { createBuffetOrder } from "../../../services/buffetOrders";
 import { createCustomerOrder } from "../../../services/customerOrders";
 import {
@@ -40,7 +41,8 @@ import {
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
 import { readCartTiming } from "../../../utils/cartTiming";
-import { getHoursStatus } from "../../../services/hours"; // ⬅️ NEW
+import { getHoursStatus } from "../../../services/hours";
+import { checkDeliveryEligibility } from "../../../services/delivery";
 
 const AK_DARK = "#0B2D24";
 const AK_GOLD = "#D1A01F";
@@ -77,11 +79,16 @@ function calcDeliveryFee(orderType: OrderType, discountedItemsSubtotal: number) 
   if (orderType !== "DELIVERY") return 0;
   return discountedItemsSubtotal >= 100 ? 0 : 5;
 }
-
 function money(n: number) {
   return `CHF ${n.toFixed(2)}`;
 }
 
+/* Small helper: convert local like "YYYY-MM-DDTHH:mm" to ISO with Z */
+function toZ(when: string) {
+  return new Date(when).toISOString();
+}
+
+/* ───────────────────────── Payment Step ───────────────────────── */
 function PaymentStep({
   totalToPay,
   summary,
@@ -142,6 +149,7 @@ function PaymentStep({
   );
 }
 
+/* ───────────────────────── Checkout Page ───────────────────────── */
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { state, total: cartTotalFromCtx } = useCart();
@@ -167,7 +175,6 @@ export default function CheckoutPage() {
     menu: 0,
     buffet: 0,
   });
-
   React.useEffect(() => {
     getActiveDiscount()
       .then((d: ActiveDiscountDTO) =>
@@ -182,11 +189,9 @@ export default function CheckoutPage() {
   const percent = hasBuffet ? disc.buffet : disc.menu;
   const discountAmount = +(itemsSubtotal * (percent / 100)).toFixed(2);
   const discountedItems = +(itemsSubtotal - discountAmount).toFixed(2);
-
   const vat = +(discountedItems * 0.026).toFixed(2);
   const deliveryFee = calcDeliveryFee(orderType, discountedItems);
   const grand = +(discountedItems + vat + deliveryFee).toFixed(2);
-
   const minDeliveryNotMet = orderType === "DELIVERY" && itemsSubtotal < 30;
 
   const [clientSecret, setClientSecret] = React.useState<string>();
@@ -197,10 +202,54 @@ export default function CheckoutPage() {
     React.useState<CheckoutCustomer>(emptyCustomer);
 
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
-  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
-    PaymentMethod.CARD
-  );
+  const [paymentMethod, setPaymentMethod] =
+    React.useState<PaymentMethodType>(PaymentMethod.CARD);
 
+  /* ─────────── dynamic delivery eligibility (backend-based) ─────────── */
+  const [eligibility, setEligibility] = React.useState<{
+    deliverable: boolean;
+    message?: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (orderType !== "DELIVERY") {
+        if (!cancelled) setEligibility({ deliverable: true });
+        return;
+      }
+      const plz = (customer.address.plz || "").trim();
+
+      // Don’t show red error before the user enters a plausible PLZ.
+      if (!plz || plz.length < 4) {
+        if (!cancelled) setEligibility(null);
+        return;
+      }
+
+      try {
+        const res = await checkDeliveryEligibility("DELIVERY", plz);
+        if (!cancelled)
+          setEligibility({
+            deliverable: res.deliverable,
+            message: res.message || undefined,
+          });
+      } catch {
+        if (!cancelled)
+          setEligibility({
+            deliverable: false,
+            message: "Unable to verify delivery area.",
+          });
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [orderType, customer.address.plz]);
+
+  /* ───────────────────── Validation helpers ───────────────────── */
   const applyBackendErrors = (details: Record<string, string>) => {
     const mapped: Errors = {};
     Object.entries(details).forEach(([k, v]) => {
@@ -230,6 +279,7 @@ export default function CheckoutPage() {
     (ev: React.ChangeEvent<HTMLInputElement>) => {
       const v = ev.target.value;
       setCustomer((prev): CheckoutCustomer => {
+        const a = { ...prev.address };
         switch (path) {
           case "firstName":
             return { ...prev, firstName: v };
@@ -240,33 +290,20 @@ export default function CheckoutPage() {
           case "phone":
             return { ...prev, phone: v };
           case "address.street":
-            return { ...prev, address: { ...prev.address, street: v } };
+            return { ...prev, address: { ...a, street: v } };
           case "address.streetNo":
-            return { ...prev, address: { ...prev.address, streetNo: v } };
+            return { ...prev, address: { ...a, streetNo: v } };
           case "address.plz":
-            return { ...prev, address: { ...prev.address, plz: v } };
+            return { ...prev, address: { ...a, plz: v } };
           case "address.city":
-            return { ...prev, address: { ...prev.address, city: v } };
+            return { ...prev, address: { ...a, city: v } };
           default:
             return prev;
         }
       });
     };
 
-  const allowedPlz = new Set([
-    "4600",
-    "4601",
-    "4609",
-    "4612",
-    "4613",
-    "4622",
-    "4623",
-    "4632",
-  ]);
-  const canDeliver =
-    orderType !== "DELIVERY" ||
-    (customer.address.plz && allowedPlz.has(customer.address.plz.trim()));
-
+  /* ───────────────────── Order prep & payment ───────────────────── */
   const preparePayment = async () => {
     try {
       setError(undefined);
@@ -278,33 +315,40 @@ export default function CheckoutPage() {
       }
       if (hasMenu && hasBuffet) {
         setError(
-          "Mixed cart (menu + buffet) is not supported yet. Please order them separately."
+          "Mixed cart (menu + buffet) is not supported yet. Please order separately."
         );
         return;
       }
+
       const errs = validate(customer);
       if (Object.keys(errs).length) {
         setFieldErrors(errs);
         setError("Please fix the highlighted fields.");
         return;
       }
-      if (!canDeliver) {
-        setError("We currently do not deliver to this address.");
+
+      if (
+        orderType === "DELIVERY" &&
+        (!eligibility || eligibility.deliverable === false)
+      ) {
+        setError(
+          eligibility?.message || "We currently do not deliver to this address."
+        );
         return;
       }
+
       if (minDeliveryNotMet) {
         setError("Minimum delivery order is CHF 30.00.");
         return;
       }
 
-      // ⬇️ NEW: Pre-check hours for the TARGET time
+      // ⬇️ Pre-check hours for the TARGET time
       const timing = readCartTiming();
-      const targetAtIso =
-        timing.asap === true
-          ? new Date(
-              Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000
-            ).toISOString()
-          : timing.scheduledAt || new Date().toISOString();
+      const targetAtIso = timing.asap
+        ? new Date(Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000).toISOString()
+        : timing.scheduledAt
+        ? toZ(timing.scheduledAt)
+        : new Date().toISOString();
 
       const hours = await getHoursStatus(orderType, targetAtIso);
       if (!hours.openNow) {
@@ -317,10 +361,17 @@ export default function CheckoutPage() {
         );
         return;
       }
-      // ⬆️ END pre-check
+      // ⬆️ End hours pre-check
 
       setPreparing(true);
       await ensureCsrf();
+
+      // Build a null-safe timing block (no scheduledAt: null)
+      const timingBlockMenu = timing.asap
+        ? { asap: true as const }
+        : timing.scheduledAt
+        ? { asap: false as const, scheduledAt: timing.scheduledAt }
+        : { asap: false as const };
 
       if (hasMenu) {
         const payload: CustomerOrderWriteDTO = {
@@ -333,12 +384,9 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
           paymentMethod,
-          ...(timing.asap === true
-            ? { asap: true }
-            : timing.scheduledAt
-            ? { asap: false, scheduledAt: timing.scheduledAt }
-            : {}),
+          ...timingBlockMenu,
         };
+
         const order = await createCustomerOrder(payload);
         if (paymentMethod === PaymentMethod.CARD) {
           const pi = await createIntentForCustomerOrder(order.id);
@@ -347,6 +395,12 @@ export default function CheckoutPage() {
           window.location.href = "/thank-you";
         }
       } else {
+        const timingBlockBuffet = timing.asap
+          ? { asap: true as const }
+          : timing.scheduledAt
+          ? { asap: false as const, scheduledAt: timing.scheduledAt }
+          : { asap: false as const };
+
         const payload: BuffetOrderWriteDTO = {
           userId: undefined,
           customerInfo: customer as any,
@@ -357,12 +411,9 @@ export default function CheckoutPage() {
             quantity: l.quantity,
           })),
           paymentMethod,
-          ...(timing.asap === true
-            ? { asap: true }
-            : timing.scheduledAt
-            ? { asap: false, scheduledAt: timing.scheduledAt }
-            : {}),
+          ...timingBlockBuffet,
         };
+
         const order = await createBuffetOrder(payload);
         if (paymentMethod === PaymentMethod.CARD) {
           const pi = await createIntentForBuffetOrder(order.id);
@@ -387,6 +438,7 @@ export default function CheckoutPage() {
     }
   };
 
+  /* ───────────────────── Order Summary ───────────────────── */
   const OrderSummary = (
     <Paper
       elevation={0}
@@ -448,7 +500,19 @@ export default function CheckoutPage() {
     </Paper>
   );
 
+  /* ───────────────────── Render ───────────────────── */
   if (!clientSecret) {
+    // Disable button if:
+    // - preparing OR
+    // - delivery & clearly not deliverable OR
+    // - delivery min not met OR
+    // - delivery and PLZ incomplete (avoid false positives)
+    const plzEntered = (customer.address.plz || "").trim().length >= 4;
+    const cannotDeliver =
+      orderType === "DELIVERY" &&
+      ((eligibility && !eligibility.deliverable) ||
+        (!eligibility && !plzEntered));
+
     return (
       <Box sx={{ p: 3, maxWidth: 1080, mx: "auto" }}>
         <Box
@@ -549,7 +613,9 @@ export default function CheckoutPage() {
               />
             </Box>
 
-            <Typography sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}>
+            <Typography
+              sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}
+            >
               Payment method
             </Typography>
             <ToggleButtonGroup
@@ -576,9 +642,10 @@ export default function CheckoutPage() {
               </Alert>
             )}
 
-            {orderType === "DELIVERY" && !canDeliver && (
+            {orderType === "DELIVERY" && eligibility && !eligibility.deliverable && (
               <Alert severity="error" sx={{ mt: 2 }}>
-                We currently do not deliver to this address.
+                {eligibility.message ||
+                  "We currently do not deliver to this address."}
               </Alert>
             )}
 
@@ -601,11 +668,7 @@ export default function CheckoutPage() {
               <Button
                 variant="contained"
                 onClick={preparePayment}
-                disabled={
-                  preparing ||
-                  (orderType === "DELIVERY" && !canDeliver) ||
-                  minDeliveryNotMet
-                }
+                disabled={preparing || cannotDeliver || minDeliveryNotMet}
                 sx={{
                   bgcolor: AK_GOLD,
                   color: AK_DARK,
