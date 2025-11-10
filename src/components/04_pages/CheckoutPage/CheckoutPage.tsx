@@ -40,7 +40,7 @@ import {
 } from "../../../services/payment";
 import { stripePromise } from "../../../stripe";
 import { ensureCsrf } from "../../../services/http";
-import { readCartTiming } from "../../../utils/cartTiming";
+import { readCartTiming, wallNoZToISOZ } from "../../../utils/cartTiming";
 import { getHoursStatus } from "../../../services/hours";
 import { checkDeliveryEligibility } from "../../../services/delivery";
 
@@ -75,7 +75,10 @@ const emptyCustomer: CheckoutCustomer = {
   address: { street: "", streetNo: "", plz: "", city: "" },
 };
 
-function calcDeliveryFee(orderType: OrderType, discountedItemsSubtotal: number) {
+function calcDeliveryFee(
+  orderType: OrderType,
+  discountedItemsSubtotal: number
+) {
   if (orderType !== "DELIVERY") return 0;
   return discountedItemsSubtotal >= 100 ? 0 : 5;
 }
@@ -202,8 +205,9 @@ export default function CheckoutPage() {
     React.useState<CheckoutCustomer>(emptyCustomer);
 
   const [fieldErrors, setFieldErrors] = React.useState<Errors>({});
-  const [paymentMethod, setPaymentMethod] =
-    React.useState<PaymentMethodType>(PaymentMethod.CARD);
+  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethodType>(
+    PaymentMethod.CARD
+  );
 
   /* ─────────── dynamic delivery eligibility (backend-based) ─────────── */
   const [eligibility, setEligibility] = React.useState<{
@@ -275,8 +279,7 @@ export default function CheckoutPage() {
   };
 
   const handleInput =
-    (path: string) =>
-    (ev: React.ChangeEvent<HTMLInputElement>) => {
+    (path: string) => (ev: React.ChangeEvent<HTMLInputElement>) => {
       const v = ev.target.value;
       setCustomer((prev): CheckoutCustomer => {
         const a = { ...prev.address };
@@ -347,7 +350,7 @@ export default function CheckoutPage() {
       const targetAtIso = timing.asap
         ? new Date(Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000).toISOString()
         : timing.scheduledAt
-        ? toZ(timing.scheduledAt)
+        ? wallNoZToISOZ(timing.scheduledAt) // ✅ correct instant
         : new Date().toISOString();
 
       const hours = await getHoursStatus(orderType, targetAtIso);
@@ -613,9 +616,7 @@ export default function CheckoutPage() {
               />
             </Box>
 
-            <Typography
-              sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}
-            >
+            <Typography sx={{ mt: 3, mb: 1, fontWeight: 700, color: AK_DARK }}>
               Payment method
             </Typography>
             <ToggleButtonGroup
@@ -642,12 +643,14 @@ export default function CheckoutPage() {
               </Alert>
             )}
 
-            {orderType === "DELIVERY" && eligibility && !eligibility.deliverable && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {eligibility.message ||
-                  "We currently do not deliver to this address."}
-              </Alert>
-            )}
+            {orderType === "DELIVERY" &&
+              eligibility &&
+              !eligibility.deliverable && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {eligibility.message ||
+                    "We currently do not deliver to this address."}
+                </Alert>
+              )}
 
             {minDeliveryNotMet && (
               <Alert severity="warning" sx={{ mt: 2 }}>
