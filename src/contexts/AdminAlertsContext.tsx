@@ -15,7 +15,7 @@ type BellOptions = {
 
 function useBell(opts: BellOptions = {}) {
   const {
-    src = "/incoming.mp3", // <- unify with public file
+    src = "/incoming.mp3", // unify with your public file
     intervalMs = 60_000,
     volume = 1,
   } = opts;
@@ -115,6 +115,8 @@ type Ctx = {
   total: number;
   refresh: () => Promise<void>;
   markSeen: (kinds: AlertKind | AlertKind[]) => Promise<void>;
+  /** Instantly mutes the global admin bell (the 60s cadence). */
+  silence: () => void;
 };
 
 const CtxObj = React.createContext<Ctx | null>(null);
@@ -144,8 +146,9 @@ export function AdminAlertsProvider({ children }: ProviderProps) {
   });
 
   const refresh = React.useCallback(async () => {
-    const a = await getAdminAlerts();
+    const a = await getAdminAlerts(); // server returns *unseen* counts
     const p = prevRef.current;
+
     const inc =
       a.reservationsRequested > p.reservationsRequested ||
       a.ordersNew > p.ordersNew ||
@@ -212,11 +215,19 @@ export function AdminAlertsProvider({ children }: ProviderProps) {
     [refresh, stopRinging]
   );
 
-  const total =
-    alerts.reservationsRequested + alerts.ordersNew + alerts.buffetOrdersNew;
-
   return (
-    <CtxObj.Provider value={{ alerts, total, refresh, markSeen }}>
+    <CtxObj.Provider
+      value={{
+        alerts,
+        total:
+          alerts.reservationsRequested +
+          alerts.ordersNew +
+          alerts.buffetOrdersNew,
+        refresh,
+        markSeen,
+        silence: stopRinging, // <- expose mute
+      }}
+    >
       {children}
     </CtxObj.Provider>
   );
