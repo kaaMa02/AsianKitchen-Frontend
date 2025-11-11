@@ -7,7 +7,7 @@ export class SingleBell {
   private active = new Map<string, number>(); // id -> expiresAt (ms)
   private timer: number | null = null;
 
-  constructor(src = "/sounds/incoming.mp3") {
+  constructor(src = "/incoming.mp3") {
     this.audio = new Audio(src);
     this.audio.loop = true;
     this.audio.preload = "auto";
@@ -40,10 +40,8 @@ export class SingleBell {
     this.active.forEach((until, id) => {
       if (until <= now) toDelete.push(id);
     });
-    // drop expired ids
-    for (let i = 0; i < toDelete.length; i++) {
-      this.active.delete(toDelete[i]);
-    }
+    for (let i = 0; i < toDelete.length; i++) this.active.delete(toDelete[i]);
+
     if (this.active.size > 0) {
       void this.playIfNeeded();
     } else {
@@ -56,7 +54,7 @@ export class SingleBell {
     this.unlocked = true;
     try {
       this.audio.muted = true;
-      await this.audio.play();
+      await this.audio.play(); // user gesture expected by caller
       this.audio.pause();
       this.audio.currentTime = 0;
       this.audio.muted = false;
@@ -86,4 +84,4 @@ export class SingleBell {
   }
 }
 
-export const sound = new SingleBell("/sounds/incoming.mp3");
+export const sound = new SingleBell("/incoming.mp3");

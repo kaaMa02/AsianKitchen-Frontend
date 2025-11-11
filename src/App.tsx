@@ -78,10 +78,7 @@ export default function App() {
             <Route path="food-items" element={<FoodItemsAdminPage />} />
             <Route path="menu-items" element={<MenuItemsAdminPage />} />
             <Route path="buffet-items" element={<BuffetItemsAdminPage />} />
-            <Route
-              path="restaurant-info"
-              element={<RestaurantInfoAdminPage />}
-            />
+            <Route path="restaurant-info" element={<RestaurantInfoAdminPage />} />
             <Route path="users" element={<UsersAdminPage />} />
           </Route>
 

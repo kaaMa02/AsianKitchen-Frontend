@@ -375,7 +375,10 @@ export default function CheckoutPage() {
       const timingBlockMenu = timing.asap
         ? { asap: true as const }
         : timing.scheduledAt
-        ? { asap: false as const, scheduledAt: timing.scheduledAt }
+        ? {
+            asap: false as const,
+            scheduledAt: wallNoZToISOZ(timing.scheduledAt),
+          } // ✅ convert
         : { asap: false as const };
 
       if (hasMenu) {
@@ -403,7 +406,10 @@ export default function CheckoutPage() {
         const timingBlockBuffet = timing.asap
           ? { asap: true as const }
           : timing.scheduledAt
-          ? { asap: false as const, scheduledAt: timing.scheduledAt }
+          ? {
+              asap: false as const,
+              scheduledAt: wallNoZToISOZ(timing.scheduledAt),
+            } // ✅ convert
           : { asap: false as const };
 
         const payload: BuffetOrderWriteDTO = {

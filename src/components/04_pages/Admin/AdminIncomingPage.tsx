@@ -126,7 +126,6 @@ export default function AdminIncomingPage() {
     setCards((prev) =>
       prev.filter((x) => !(x.kind === kind && String(x.id) === id))
     );
-    // stop any lingering sound if list becomes empty
     setTimeout(() => {
       if (!prevIds.current.size) sound.stopAll();
     }, 0);
@@ -134,7 +133,6 @@ export default function AdminIncomingPage() {
 
   const onConfirm = async (c: NewOrderCardDTO, extraMinutes?: number) => {
     await confirmOrder(c.kind as Kind, c.id, extraMinutes, true);
-    // print immediately for menu/buffet
     try {
       if (c.kind === "menu") {
         const full = await getCustomerOrder(String(c.id));
@@ -143,9 +141,7 @@ export default function AdminIncomingPage() {
         const full = await getBuffetOrder(String(c.id));
         await printCustomerOrderReceipt(full as any);
       }
-    } catch {
-      /* non-fatal: printing is best-effort */
-    }
+    } catch {}
     removeCard(c.kind, String(c.id));
   };
 
@@ -182,7 +178,7 @@ export default function AdminIncomingPage() {
         </div>
       )}
 
-      {/* Filter bar (right, compact, neutral) */}
+      {/* Filter bar */}
       <div
         style={{
           display: "flex",
@@ -287,7 +283,6 @@ function Card(props: {
   const isOrder = card.kind === "menu" || card.kind === "buffet";
   const isASAP = !!card.timing.asap;
 
-  // extra minutes bubbles (base 45; these are *extra* minutes)
   const EXTRA_CHOICES = [10, 15, 20, 30] as const;
   const [extra, setExtra] = React.useState<number>(
     card.timing.adminExtraMinutes ?? 0
@@ -307,7 +302,6 @@ function Card(props: {
       : "—";
   })();
 
-  // subtle “popping” tints per kind
   const tint =
     card.kind === "menu"
       ? "#fff8ee"
@@ -364,7 +358,6 @@ function Card(props: {
         }}
       />
 
-      {/* Items first */}
       {card.kind !== "reservation" && card.menuItems?.length ? (
         <ItemsList
           title="Menu items"
@@ -412,7 +405,6 @@ function Card(props: {
         </Row>
       </section>
 
-      {/* Special instructions */}
       {!!card.specialInstructions && (
         <div
           style={{
@@ -428,7 +420,6 @@ function Card(props: {
         </div>
       )}
 
-      {/* ASAP extra-minute bubbles */}
       {isOrder && isASAP && (
         <div
           style={{
@@ -470,7 +461,7 @@ function Card(props: {
         </div>
       )}
 
-      {/* Actions (right-aligned) */}
+      {/* Actions */}
       <div
         style={{
           display: "flex",
@@ -487,7 +478,7 @@ function Card(props: {
             border: "1px solid transparent",
             cursor: "pointer",
             fontWeight: 800,
-            background: "#16a34a", // green
+            background: "#16a34a",
             color: "#fff",
           }}
           title={
