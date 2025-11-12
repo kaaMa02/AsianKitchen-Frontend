@@ -86,9 +86,22 @@ function money(n: number) {
   return `CHF ${n.toFixed(2)}`;
 }
 
-/* Small helper: convert local like "YYYY-MM-DDTHH:mm" to ISO with Z */
-function toZ(when: string) {
-  return new Date(when).toISOString();
+/** ────────────── NEW: normalize scheduledAt for API (no 'Z') ────────────── */
+function isoToWallNoZ(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  return `${y}-${m}-${day}T${hh}:${mm}`;
+}
+/** Accepts either wall ('YYYY-MM-DDTHH:mm') or ISO/ISO-Z and returns wall (no Z). */
+function normalizeScheduledForApi(s?: string) {
+  if (!s) return s;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return s; // already wall-no-Z
+  return isoToWallNoZ(s); // convert ISO/ISO-Z to local wall
 }
 
 /* ───────────────────────── Payment Step ───────────────────────── */
@@ -352,7 +365,7 @@ export default function CheckoutPage() {
       const targetAtIso = timing.asap
         ? new Date(Date.now() + SERVER_MIN_LEAD_MINUTES * 60_000).toISOString()
         : timing.scheduledAt
-        ? wallNoZToISOZ(timing.scheduledAt) // ✅ correct instant
+        ? wallNoZToISOZ(timing.scheduledAt) // ✅ correct instant for hours service
         : new Date().toISOString();
 
       const hours = await getHoursStatus(orderType, targetAtIso);
@@ -371,14 +384,14 @@ export default function CheckoutPage() {
       setPreparing(true);
       await ensureCsrf();
 
-      // Build a null-safe timing block (no scheduledAt: null)
+      // Build a null-safe timing block and ensure we never send ISO-Z to the Orders API
       const timingBlockMenu = timing.asap
         ? { asap: true as const }
         : timing.scheduledAt
         ? {
             asap: false as const,
-            scheduledAt: wallNoZToISOZ(timing.scheduledAt),
-          } // ✅ convert
+            scheduledAt: normalizeScheduledForApi(timing.scheduledAt),
+          }
         : { asap: false as const };
 
       if (hasMenu) {
@@ -408,8 +421,8 @@ export default function CheckoutPage() {
           : timing.scheduledAt
           ? {
               asap: false as const,
-              scheduledAt: wallNoZToISOZ(timing.scheduledAt),
-            } // ✅ convert
+              scheduledAt: normalizeScheduledForApi(timing.scheduledAt),
+            }
           : { asap: false as const };
 
         const payload: BuffetOrderWriteDTO = {
