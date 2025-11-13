@@ -7,6 +7,7 @@ export class SingleBell {
   private active = new Map<string, number>(); // id -> expiresAt (ms)
   private timer: number | null = null;
 
+  // ✅ default matches your actual file in /public/incoming.mp3
   constructor(src = "/incoming.mp3") {
     this.audio = new Audio(src);
     this.audio.loop = true;
@@ -42,11 +43,8 @@ export class SingleBell {
     });
     for (let i = 0; i < toDelete.length; i++) this.active.delete(toDelete[i]);
 
-    if (this.active.size > 0) {
-      void this.playIfNeeded();
-    } else {
-      this.stopIfPlaying();
-    }
+    if (this.active.size > 0) void this.playIfNeeded();
+    else this.stopIfPlaying();
   }
 
   async enable() {
@@ -54,7 +52,7 @@ export class SingleBell {
     this.unlocked = true;
     try {
       this.audio.muted = true;
-      await this.audio.play(); // user gesture expected by caller
+      await this.audio.play();
       this.audio.pause();
       this.audio.currentTime = 0;
       this.audio.muted = false;
@@ -84,4 +82,5 @@ export class SingleBell {
   }
 }
 
-export const sound = new SingleBell("/incoming.mp3");
+// ✅ use default (no custom /sounds prefix)
+export const sound = new SingleBell();
