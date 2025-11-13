@@ -21,7 +21,6 @@ const MUTED = "#6b7280";
 const AK_DARK = "#0B2D24";
 const SHOW_DEBUG = false;
 
-// map card kind -> alerts bucket
 const bucketFor = (k: Kind): AlertKind =>
   k === "menu" ? "orders" : k === "buffet" ? "buffet" : "reservations";
 
@@ -32,9 +31,8 @@ export default function AdminIncomingPage() {
   const [lastStatus, setLastStatus] = React.useState<string>("—");
   const [lastFetchAt, setLastFetchAt] = React.useState<number | null>(null);
 
-  const { silence } = useAdminAlerts(); // <- instant mute for global bell
+  const { silence } = useAdminAlerts();
 
-  // filter bar state
   const [showMenu, setShowMenu] = React.useState(true);
   const [showBuffet, setShowBuffet] = React.useState(true);
   const [showReservations, setShowReservations] = React.useState(true);
@@ -43,7 +41,6 @@ export default function AdminIncomingPage() {
   const seenOnce = React.useRef<Set<string>>(new Set());
   const inflight = React.useRef<boolean>(false);
 
-  // one-time audio unlock
   React.useEffect(() => {
     const unlock = () => {
       sound.enable().catch(() => {});
@@ -56,14 +53,11 @@ export default function AdminIncomingPage() {
     };
   }, []);
 
-  // zero all red badges on entry
   React.useEffect(() => {
     markAlertsSeen(["orders", "buffet", "reservations"]).catch(() => {});
-    // also mute immediately on entry
     silence();
   }, [silence]);
 
-  // polling
   React.useEffect(() => {
     let aborted = false;
     const ctrl = new AbortController();
@@ -83,7 +77,6 @@ export default function AdminIncomingPage() {
         const newIds = new Set(data.map((d) => `${d.kind}:${d.id}`));
         const oldIds = prevIds.current;
 
-        // start sound for truly new cards, mark seen (server)
         for (const d of data) {
           const k = `${d.kind}:${d.id}`;
           if (!oldIds.has(k)) {
@@ -91,7 +84,6 @@ export default function AdminIncomingPage() {
             if (!seenOnce.current.has(k)) {
               seenOnce.current.add(k);
               markSeen(d.kind as Kind, d.id).catch(() => {});
-              // immediately mark the corresponding bucket as seen and mute global bell
               markAlertsSeen(bucketFor(d.kind as Kind))
                 .then(() => silence())
                 .catch(() => {});
@@ -99,7 +91,6 @@ export default function AdminIncomingPage() {
           }
         }
 
-        // stop sound for cards that disappeared
         oldIds.forEach((k) => {
           if (!newIds.has(k)) sound.stop(k);
         });
@@ -129,18 +120,18 @@ export default function AdminIncomingPage() {
       window.clearInterval(handle);
       sound.stopAll();
       prevIds.current.clear();
+      silence(); // <- ensure cadence is muted on unmount
     };
   }, [silence]);
 
   const removeCard = React.useCallback(
     (kind: string, id: string) => {
       const key = `${kind}:${id}`;
-      sound.stop(key); // stop per-card loop
+      sound.stop(key);
       prevIds.current.delete(key);
       setCards((prev) =>
         prev.filter((x) => !(x.kind === kind && String(x.id) === id))
       );
-      // if nothing left locally, also mute global bell
       setTimeout(() => {
         if (!prevIds.current.size) {
           sound.stopAll();
@@ -154,7 +145,6 @@ export default function AdminIncomingPage() {
   const onConfirm = async (c: NewOrderCardDTO, extraMinutes?: number) => {
     await confirmOrder(c.kind as Kind, c.id, extraMinutes, true);
     try {
-      // printing best-effort
       if (c.kind === "menu") {
         const full = await getCustomerOrder(String(c.id));
         await printCustomerOrderReceipt(full as any);
@@ -163,7 +153,6 @@ export default function AdminIncomingPage() {
         await printCustomerOrderReceipt(full as any);
       }
     } catch {}
-    // mark bucket seen and mute immediately
     try {
       await markAlertsSeen(bucketFor(c.kind as Kind));
     } finally {
@@ -175,7 +164,6 @@ export default function AdminIncomingPage() {
   const onCancel = async (c: NewOrderCardDTO) => {
     const reason = window.prompt("Reason (optional):") || "";
     await cancelOrder(c.kind as Kind, c.id, reason, false);
-    // mark bucket seen and mute immediately
     try {
       await markAlertsSeen(bucketFor(c.kind as Kind));
     } finally {
@@ -211,7 +199,6 @@ export default function AdminIncomingPage() {
         </div>
       )}
 
-      {/* Filter bar */}
       <div
         style={{
           display: "flex",
@@ -362,7 +349,6 @@ function Card(props: {
         gap: 8,
       }}
     >
-      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -410,7 +396,6 @@ function Card(props: {
         />
       ) : null}
 
-      {/* Customer info */}
       <section
         style={{
           display: "grid",
@@ -494,7 +479,6 @@ function Card(props: {
         </div>
       )}
 
-      {/* Actions */}
       <div
         style={{
           display: "flex",

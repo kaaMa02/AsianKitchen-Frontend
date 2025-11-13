@@ -7,8 +7,7 @@ export class SingleBell {
   private active = new Map<string, number>(); // id -> expiresAt (ms)
   private timer: number | null = null;
 
-  // ✅ default matches your actual file in /public/incoming.mp3
-  constructor(src = "/incoming.mp3") {
+  constructor(src = "/incoming.mp3") {           // ⬅️ FIXED PATH
     this.audio = new Audio(src);
     this.audio.loop = true;
     this.audio.preload = "auto";
@@ -22,9 +21,7 @@ export class SingleBell {
 
   private async playIfNeeded() {
     if (this.audio.paused) {
-      try {
-        await this.audio.play();
-      } catch {}
+      try { await this.audio.play(); } catch {}
     }
   }
 
@@ -38,10 +35,8 @@ export class SingleBell {
   private pulse() {
     const now = Date.now();
     const toDelete: string[] = [];
-    this.active.forEach((until, id) => {
-      if (until <= now) toDelete.push(id);
-    });
-    for (let i = 0; i < toDelete.length; i++) this.active.delete(toDelete[i]);
+    this.active.forEach((until, id) => { if (until <= now) toDelete.push(id); });
+    toDelete.forEach(id => this.active.delete(id));
 
     if (this.active.size > 0) void this.playIfNeeded();
     else this.stopIfPlaying();
@@ -69,10 +64,7 @@ export class SingleBell {
 
   /** Stop ringing on behalf of this id (e.g., card removed). */
   stop(id: string) {
-    if (this.active.has(id)) {
-      this.active.delete(id);
-      this.pulse();
-    }
+    if (this.active.delete(id)) this.pulse();
   }
 
   /** Hard stop everything. */
@@ -82,5 +74,4 @@ export class SingleBell {
   }
 }
 
-// ✅ use default (no custom /sounds prefix)
-export const sound = new SingleBell();
+export const sound = new SingleBell("/incoming.mp3"); // ⬅️ FIXED PATH
