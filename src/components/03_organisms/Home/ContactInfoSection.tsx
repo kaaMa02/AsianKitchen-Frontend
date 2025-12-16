@@ -23,11 +23,6 @@ export default function ContactInfoSection() {
           <Box id="contact" sx={{ scrollMarginTop: { xs: NAV_H_XS, md: NAV_H_MD } }}>
             <ContactCard />
           </Box>
-
-          {/* Info card (anchor target) */}
-          <Box id="info" sx={{ scrollMarginTop: { xs: NAV_H_XS, md: NAV_H_MD } }}>
-            <InfoCard />
-          </Box>
         </Box>
       </MuiContainer>
     </Box>
