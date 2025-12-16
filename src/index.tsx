@@ -8,25 +8,30 @@ import { RestaurantInfoProvider } from "./contexts/RestaurantInfoContext";
 import { CartProvider } from "./contexts/CartContext";
 import { ToastProvider } from "./services/toast";
 import { ensureCsrf } from "./services/http";
+import { HelmetProvider } from "react-helmet-async";
 
 ensureCsrf().catch(() => {});
 
 const theme = createTheme();
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+const root = ReactDOM.createRoot(
+  document.getElementById("root") as HTMLElement
+);
 root.render(
-  <ThemeProvider theme={theme}>
-    <CssBaseline />
-    <BrowserRouter>
-      <AuthProvider>
-        <RestaurantInfoProvider>
-          <CartProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
-          </CartProvider>
-        </RestaurantInfoProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </ThemeProvider>
+  <HelmetProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <AuthProvider>
+          <RestaurantInfoProvider>
+            <CartProvider>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </CartProvider>
+          </RestaurantInfoProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
+  </HelmetProvider>
 );

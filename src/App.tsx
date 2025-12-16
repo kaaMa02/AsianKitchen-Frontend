@@ -29,6 +29,7 @@ import ThankYouPage from "./components/04_pages/ThankYouPage/ThankYouPage";
 import TrackBuffetOrderPage from "./components/04_pages/TrackOrderPage/TrackBuffetOrderPage";
 import TrackMenuOrderPage from "./components/04_pages/TrackOrderPage/TrackMenuOrderPage";
 import AdminIncomingPage from "./components/04_pages/Admin/AdminIncomingPage";
+import { GF_ORDER_URL, GF_RESERVATION_URL } from "./config/gloriafood";
 
 const HomePage = lazy(() => import("./components/04_pages/HomePage/HomePage"));
 const MenuPage = lazy(() => import("./components/04_pages/MenuPage/MenuPage"));
@@ -50,9 +51,9 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/menu" element={<MenuPage />} />
+          <Route path="/menu" element={GF_ORDER_URL} />
           <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/reservation" element={<ReservationPage />} />
+          <Route path="/reservation" element={GF_RESERVATION_URL} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
           <Route path="/track" element={<TrackMenuOrderPage />} />

@@ -33,17 +33,29 @@ export default function HeroSection() {
           </Typography>
 
           <Typography
-            component="h2"
+            component="h1"
             sx={{
               color: "#EFE7CE",
               fontSize: { xs: 42, md: 68 },
               fontWeight: 800,
               letterSpacing: "-0.02em",
-              mt: 1.5,
-              minHeight: "1.2em",
+              lineHeight: 1.1,
             }}
           >
             Asian Kitchen
+          </Typography>
+
+          <Typography
+            component="h2"
+            sx={{
+              color: "#EFE7CE",
+              fontSize: { xs: 20, md: 26 },
+              fontWeight: 450,
+              mt: 1.5,
+              opacity: 0.95,
+            }}
+          >
+            Sushi, Thai & mehr in Trimbach
           </Typography>
 
           {/* Primary CTAs */}
@@ -56,8 +68,21 @@ export default function HeroSection() {
               width: "100%",
             }}
           >
-            <AKButton asLinkHref={GF_ORDER_URL}>Menu & Bestellung</AKButton>
-            <AKButton asLinkHref={GF_RESERVATION_URL}>Book a Table</AKButton>
+            <AKButton
+              asLinkHref={GF_ORDER_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Menu & Bestellung
+            </AKButton>
+
+            <AKButton
+              asLinkHref={GF_RESERVATION_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Book a Table
+            </AKButton>
           </Box>
         </Box>
       </MuiContainer>
