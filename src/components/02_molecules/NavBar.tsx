@@ -30,8 +30,6 @@ export default function Navbar() {
             <Link component={RouterLink} underline="none" to="/#about" sx={linkSx}>About Us</Link>
             <Link component={RouterLink} underline="none" to="/#location" sx={linkSx}>Location</Link>
             <Link component={RouterLink} underline="none" to="/#contact" sx={linkSx}>Contact</Link>
-            <Link component={RouterLink} underline="none" to="/menu" sx={linkSx}>Menu</Link>
-            <Link component={RouterLink} underline="none" to="/reservation" sx={linkSx}>Reservation</Link>
           </Box>
         </Toolbar>
       </MuiContainer>
